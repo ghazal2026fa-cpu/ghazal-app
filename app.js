@@ -199,10 +199,15 @@ function renderBody() {
   if (S.tab === 'home') viewHome(); else viewInv();
 }
 function openMenu() {
-  sheet('<h2>' + esc(S.name || '') + '</h2><div class="menu"><button id="m1"><span class="i">↻</span><div>تحديث البيانات<small>سحب آخر الأرقام من الشيت</small></div></button>' +
+  sheet('<h2>' + esc(S.name || '') + '</h2><div class="menu">' +
+    '<button id="m3"><span class="i">☰</span><div>سجل الحركات<small>المصروفات والنقد والمسحوبات، مع حذف ما سُجّل بالخطأ</small></div></button>' +
+    '<button id="m4"><span class="i">⚙</span><div>الإعدادات<small>بوتيك جديد، الرقم السري، ذاكرة الصور</small></div></button>' +
+    '<button id="m1"><span class="i">↻</span><div>تحديث البيانات<small>سحب آخر الأرقام من الشيت</small></div></button>' +
     '<button id="m2"><span class="i">⎋</span><div>تسجيل الخروج<small>على هذا الجهاز</small></div></button></div>', function (el, close) {
     $('#m1', el).onclick = function () { close(); refreshBtn(); };
     $('#m2', el).onclick = function () { close(); logout(); };
+    $('#m3', el).onclick = function () { close(); logSheet(); };
+    $('#m4', el).onclick = function () { close(); settingsSheet(); };
   });
 }
 
@@ -224,7 +229,7 @@ function viewHome() {
     '<div class="kv"><span>في البوتيكات</span><b>' + fmt0(inv.boutique.n) + ' قطعة · ' + fmt(inv.boutique.v) + '</b></div>' +
     '<div class="kv"><span>في الطريق</span><b>' + fmt0(inv.transit.n) + ' قطعة · ' + fmt(inv.transit.v) + '</b></div></div>' +
     '<div class="card"><h3>البوتيكات</h3>' + (d.boutiques.length ? d.boutiques.map(function (x) {
-      return '<div class="bt"><div><div class="n">' + esc(x.n) + '</div><div class="m">عنده ' + fmt0(x.pcs) + ' قطعة · باع ' + fmt0(x.sold) + '</div></div><div class="o">' + fmt(x.owed) + '<div class="m">متبقٍّ عليه</div></div></div>';
+      return '<div class="bt" data-b="' + esc(x.n) + '"><div><div class="n">' + esc(x.n) + ' ‹</div><div class="m">عنده ' + fmt0(x.pcs) + ' قطعة · باع ' + fmt0(x.sold) + '</div></div><div class="o">' + fmt(x.owed) + '<div class="m">متبقٍّ عليه</div></div></div>';
     }).join('') : '<div class="empty">لا توجد بوتيكات</div>') + '</div>' +
     '<div class="card"><h3>أرباح وخسائر الشهر</h3>' +
     '<div class="kv"><span>المبيعات</span><b>' + fmt(m.sales) + '</b></div><div class="kv"><span>تكلفة القطع المباعة</span><b>' + fmt(m.cost) + '</b></div>' +
@@ -232,6 +237,7 @@ function viewHome() {
     '<div class="kv"><span>صافي الربح</span><b class="' + (m.net >= 0 ? 'pos' : 'neg') + '">' + fmt(m.net) + '</b></div>' +
     '<div class="kv"><span>مسحوبات شخصية (خارج الربح)</span><b>' + fmt(m.draws) + '</b></div></div>' +
     '<div class="stale">آخر تحديث ' + upd + ' · الأرقام بالريال العماني</div>';
+  $$('.bt[data-b]', b).forEach(function (r) { r.onclick = function () { boutiqueSheet(r.getAttribute('data-b')); }; });
 }
 
 /* ---------- inventory ---------- */
@@ -287,8 +293,12 @@ function updateBulk() {
   var old = $('.bulk'); if (old) old.remove();
   var n = Object.keys(S.sel).length; if (!S.select || !n) return;
   var d = document.createElement('div'); d.className = 'bulk';
-  d.innerHTML = '<div class="c">' + n + ' محددة</div><button id="bm">نقل لبوتيك</button><button id="bb">إرجاع للمخزن</button><button class="g" id="bx">مسح</button>';
+  d.innerHTML = '<div class="c">' + n + ' محددة</div><button id="bs">بيع</button><button id="bm">نقل</button><button id="bb">إرجاع</button><button class="g" id="bx">مسح</button>';
   document.body.appendChild(d);
+  $('#bs').onclick = function () {
+    var items = Object.keys(S.sel).map(byCode).filter(Boolean);
+    pickPieces({title: 'بيع ' + items.length + ' قطعة', items: items, withPrice: true, all: true, label: 'تسجيل البيع', run: runSellMany});
+  };
   $('#bm').onclick = function () { chooseBoutique(Object.keys(S.sel)); };
   $('#bb').onclick = function () { confirmBack(Object.keys(S.sel)); };
   $('#bx').onclick = function () { S.sel = {}; fillItems(); };
@@ -307,7 +317,7 @@ function openItem(code) {
   if (k === 'main') acts = '<button class="act pri" id="a-sell">بيع</button><button class="act" id="a-move">نقل لبوتيك</button>';
   else if (k === 'bt') acts = '<button class="act pri" id="a-sell">بيع</button><button class="act" id="a-back">إرجاع للمخزن</button><button class="act full" id="a-move">نقل لبوتيك آخر</button>';
   else if (k === 'sold') acts = '<button class="act dng full" id="a-unsell">إلغاء البيع</button>';
-  acts += '<button class="act full" id="a-photo">' + (it.ph ? 'تغيير الصورة' : 'تصوير القطعة') + '</button>';
+  acts += '<button class="act" id="a-edit">تعديل الوصف والسعر</button><button class="act" id="a-photo">' + (it.ph ? 'تغيير الصورة' : 'تصوير القطعة') + '</button>';
   sheet('<div class="big" data-ph="' + (it.ph ? it.ph + '@900' : '') + '">' + (it.ph ? '' : '<div class="no" style="color:var(--rose-d)">لا توجد صورة بعد</div>') + '</div>' +
     '<h2>' + esc(it.d) + '</h2>' + rows + '<div class="acts">' + acts + '</div>', function (el, close) {
     if (it.ph) { var key = it.ph + '@900'; if (S.photos[key]) paint(key); else { if (S.photos[it.ph + '@360']) { S.photos[key + 'tmp'] = 1; var big = $('.big', el); var im = document.createElement('img'); im.src = S.photos[it.ph + '@360']; big.appendChild(im); } wantPhoto(it.ph, 900); } }
@@ -317,6 +327,7 @@ function openItem(code) {
     on('#a-back', function () { confirmBack([it.c]); });
     on('#a-unsell', function () { confirmUnsell(it); });
     on('#a-photo', function () { photoFlow(it); });
+    on('#a-edit', function () { editSheet(it); });
   });
 }
 function after(r, okMsg) {
@@ -417,9 +428,9 @@ function expenseSheet() {
     };
   });
 }
-function cashSheet() {
+function cashSheet(pre) {
   var names = ((S.meta && S.meta.boutiques) || []).concat(['من الحساب الشخصي']);
-  sheet('<h2>استلام نقد</h2>' + numField('am', 'المبلغ (ر.ع)') + '<div class="f"><label>من</label><select id="pt">' + names.map(function (n) { return '<option>' + esc(n) + '</option>'; }).join('') + '<option value="__o">جهة أخرى…</option></select></div>' +
+  sheet('<h2>استلام نقد</h2>' + numField('am', 'المبلغ (ر.ع)') + '<div class="f"><label>من</label><select id="pt">' + names.map(function (n) { return '<option' + (n === pre ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '<option value="__o">جهة أخرى…</option></select></div>' +
     '<div class="f hide" id="oth"><label>اسم الجهة</label><input id="on"></div><div class="f"><label>ملاحظة (اختياري)</label><input id="nt"></div><button class="act pri" style="width:100%" id="ok">تسجيل الاستلام</button>', function (el, close) {
     $('#pt', el).onchange = function () { $('#oth', el).classList.toggle('hide', this.value !== '__o'); };
     $('#ok', el).onclick = function () {
@@ -435,6 +446,144 @@ function withdrawSheet() {
       var a = Number($('#am', el).value); if (!(a > 0)) return toast('اكتب المبلغ', true);
       close(); api('withdraw', {amount: a, note: $('#nt', el).value.trim()}).then(after);
     };
+  });
+}
+
+/* ---------- piece picker (bulk actions) ---------- */
+function pickPieces(o) {
+  if (!o.items.length) return toast('لا توجد قطع', true);
+  sheet('<h2>' + esc(o.title) + '</h2><div class="sum" id="ps"></div><div class="f"><input id="pq" type="search" placeholder="بحث بالوصف أو الكود"></div><div id="pl">' +
+    o.items.map(function (i) {
+      return '<label class="row-ck pk" data-c="' + esc(i.c) + '" data-s="' + esc((i.c + ' ' + i.d).toLowerCase()) + '"><input type="checkbox"' + (o.all ? ' checked' : '') + '>' +
+        '<span style="flex:1;font-size:14px;line-height:1.35">' + esc(i.d) + '<br><small style="color:var(--mute);direction:ltr;display:inline-block">' + esc(i.c) + '</small></span>' +
+        (o.withPrice ? '<input class="pp" type="number" inputmode="decimal" step="0.001" value="' + i.sp + '" style="width:86px;padding:8px;border-radius:10px;border:1.5px solid var(--line);text-align:center">' : '<b>' + fmt(i.sp) + '</b>') + '</label>';
+    }).join('') + '</div><button class="act pri" style="width:100%;margin-top:12px" id="ok">' + esc(o.label) + '</button>', function (el, close) {
+    function sum() {
+      var n = 0, tot = 0;
+      $$('.pk', el).forEach(function (r) { if ($('input[type=checkbox]', r).checked) { n++; var p = $('.pp', r); tot += p ? Number(p.value) || 0 : 0; } });
+      $('#ps', el).textContent = n + ' قطعة محددة' + (o.withPrice ? ' · المجموع ' + fmt(tot) + ' ر.ع' : '');
+    }
+    $$('.pk input', el).forEach(function (x) { x.oninput = sum; x.onchange = sum; });
+    $('#pq', el).oninput = function () { var q = this.value.trim().toLowerCase(); $$('.pk', el).forEach(function (r) { r.style.display = (!q || r.getAttribute('data-s').indexOf(q) >= 0) ? '' : 'none'; }); };
+    sum();
+    $('#ok', el).onclick = function () {
+      var list = [];
+      $$('.pk', el).forEach(function (r) {
+        if (!$('input[type=checkbox]', r).checked) return;
+        var p = $('.pp', r); list.push({code: r.getAttribute('data-c'), price: p ? Number(p.value) : 0});
+      });
+      if (!list.length) return toast('اختر قطعة واحدة على الأقل', true);
+      if (o.withPrice && list.some(function (x) { return !(x.price > 0); })) return toast('اكتب سعراً صحيحاً لكل قطعة محددة', true);
+      close(); o.run(list);
+    };
+  });
+}
+function runSellMany(list) {
+  api('sellMany', {items: list}).then(function (r) {
+    if (r && r.ok && r.profit != null) r.msg += ' · الربح ' + fmt(r.profit);
+    if (r && r.results) { var bad = r.results.filter(function (x) { return !x.ok; }); if (bad.length) r.msg += ' — لم تُسجَّل: ' + bad.map(function (x) { return x.code + ' (' + x.msg + ')'; }).join('، '); }
+    after(r);
+  });
+}
+
+/* ---------- boutique page ---------- */
+function boutiqueSheet(name) {
+  var d = ((S.dash && S.dash.boutiques) || []).filter(function (x) { return x.n === name; })[0] || {n: name, pcs: 0, sold: 0, soldVal: 0, paid: 0, prior: 0, owed: 0};
+  var items = S.inv ? S.inv.items : [];
+  var here = items.filter(function (i) { return i.loc === name && i.st === 'في البوتيك'; });
+  var inMain = items.filter(function (i) { return i.st === 'في المخزن'; });
+  sheet('<h2>' + esc(name) + '</h2><div class="card">' +
+    '<div class="kv"><span>عنده الآن</span><b>' + here.length + ' قطعة</b></div>' +
+    '<div class="kv"><span>باع منذ بدء النظام</span><b>' + fmt0(d.sold) + ' قطعة · ' + fmt(d.soldVal) + '</b></div>' +
+    '<div class="kv"><span>مستحق قبل بدء النظام</span><b>' + fmt(d.prior) + '</b></div>' +
+    '<div class="kv"><span>نقد استلمته منه</span><b>' + fmt(d.paid) + '</b></div>' +
+    '<div class="kv"><span>المتبقي عليه</span><b>' + fmt(d.owed) + '</b></div></div>' +
+    '<div class="acts" style="margin-top:0"><button class="act pri" id="b-sell">تسجيل مبيعات</button><button class="act" id="b-cash">استلام نقد منه</button>' +
+    '<button class="act" id="b-back">إرجاع قطع</button><button class="act" id="b-move">نقل قطع إليه</button></div>' +
+    '<h3 style="margin-top:18px">القطع عنده (' + here.length + ')</h3>' +
+    (here.length ? here.map(function (i) { return '<div class="kv"><span>' + esc(i.d) + '<br><small style="color:var(--mute);direction:ltr;display:inline-block">' + esc(i.c) + '</small></span><b>' + fmt(i.sp) + '</b></div>'; }).join('') : '<div class="empty">لا توجد قطع عنده</div>'),
+    function (el, close) {
+      var on = function (id, fn) { $(id, el).onclick = function () { close(); fn(); }; };
+      on('#b-sell', function () { pickPieces({title: 'مبيعات ' + name, items: here, withPrice: true, label: 'تسجيل البيع', run: runSellMany}); });
+      on('#b-cash', function () { cashSheet(name); });
+      on('#b-back', function () { pickPieces({title: 'إرجاع من ' + name, items: here, label: 'إرجاع للمخزن', run: function (l) { api('back', {codes: l.map(function (x) { return x.code; })}).then(after); }}); });
+      on('#b-move', function () { pickPieces({title: 'نقل إلى ' + name, items: inMain, label: 'نقل', run: function (l) { api('move', {codes: l.map(function (x) { return x.code; }), boutique: name}).then(after); }}); });
+    });
+}
+
+/* ---------- edit piece ---------- */
+function editSheet(it) {
+  sheet('<h2>تعديل القطعة</h2><div class="sum" style="direction:ltr;text-align:right">' + esc(it.c) + '</div>' +
+    '<div class="f"><label>الوصف</label><input id="ds" value="' + esc(it.d) + '"></div>' +
+    '<div class="f"><label>سعر البيع المعتمد (ر.ع)</label><input id="sp" type="number" inputmode="decimal" step="0.001" value="' + it.sp + '"></div>' +
+    '<label class="row-ck"><input type="checkbox" id="same"> تطبيق على كل القطع غير المباعة التي لها نفس الوصف الحالي</label>' +
+    '<button class="act pri" style="width:100%" id="ok">حفظ التعديل</button>', function (el, close) {
+    $('#ok', el).onclick = function () {
+      var ds = $('#ds', el).value.trim(), sp = Number($('#sp', el).value);
+      if (!ds) return toast('اكتب الوصف', true); if (!(sp > 0)) return toast('اكتب سعراً صحيحاً', true);
+      close(); api('editPiece', {code: it.c, desc: ds, sale: sp, same: $('#same', el).checked}).then(after);
+    };
+  });
+}
+
+/* ---------- settings / log ---------- */
+function settingsSheet() {
+  sheet('<h2>الإعدادات</h2><div class="menu">' +
+    '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
+    '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
+    '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + '</div>', function (el, close) {
+    $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
+    $('#s2', el).onclick = function () { close(); pinSheet(); };
+    $('#s3', el).onclick = function () {
+      S.photos = {};
+      idbOpen().then(function (d) { try { if (d) d.transaction('ph', 'readwrite').objectStore('ph').clear(); } catch (e) {} });
+      close(); toast('تم مسح ذاكرة الصور'); renderBody();
+    };
+  });
+}
+function addBoutiqueSheet() {
+  sheet('<h2>بوتيك جديد</h2><div class="f"><label>اسم البوتيك</label><input id="nm" placeholder="مثال: بوتيك الأناقة"></div><button class="act pri" style="width:100%" id="ok">إضافة</button>', function (el, close) {
+    $('#ok', el).onclick = function () {
+      var n = $('#nm', el).value.trim(); if (!n) return toast('اكتب الاسم', true);
+      close(); api('addBoutique', {name: n}).then(after);
+    };
+  });
+}
+function pinSheet() {
+  sheet('<h2>تغيير الرقم السري</h2><div class="f"><label>الرقم الحالي</label><input id="o" type="password" inputmode="numeric" autocomplete="off"></div>' +
+    '<div class="f"><label>الرقم الجديد (4 إلى 8 أرقام)</label><input id="n" type="password" inputmode="numeric" autocomplete="off"></div>' +
+    '<div class="f"><label>أعد كتابة الرقم الجديد</label><input id="n2" type="password" inputmode="numeric" autocomplete="off"></div>' +
+    '<button class="act pri" style="width:100%" id="ok">حفظ</button>', function (el, close) {
+    $('#ok', el).onclick = function () {
+      var o = $('#o', el).value, n = $('#n', el).value;
+      if (n !== $('#n2', el).value) return toast('الرقمان الجديدان غير متطابقين', true);
+      if (!/^[0-9]{4,8}$/.test(n)) return toast('الرقم من 4 إلى 8 أرقام فقط', true);
+      close(); api('changePin', {old: o, nw: n}).then(function (r) { toast((r && r.msg) || 'تعذر التغيير', !(r && r.ok)); });
+    };
+  });
+}
+var DELETABLE = {'مصروف تشغيلي': 1, 'استلام نقد': 1, 'مسحوبات شخصية': 1};
+function logSheet() {
+  sheet('<h2>سجل الحركات</h2><div id="lg"><div class="sk"></div><div class="sk"></div></div>', function (el, close) {
+    api('trx', {n: 60}, {silent: true}).then(function (r) {
+      var box = $('#lg', el); if (!box) return;
+      if (!r || !r.ok) { box.innerHTML = '<div class="empty">' + esc((r && r.msg) || 'تعذر التحميل') + '</div>'; return; }
+      if (!r.rows.length) { box.innerHTML = '<div class="empty">لا توجد حركات</div>'; return; }
+      box.innerHTML = r.rows.map(function (x, i) {
+        var inn = x.t === 'استلام نقد';
+        return '<div class="bt"><div><div class="n">' + esc(x.t) + (x.p ? ' · ' + esc(x.p) : '') + '</div><div class="m">' + esc(x.d) + (x.nt ? ' · ' + esc(x.nt) : '') + '</div></div>' +
+          '<div class="o ' + (inn ? 'pos' : '') + '">' + (inn ? '+' : '') + fmt(x.a) + (DELETABLE[x.t] ? '<br><button data-i="' + i + '" class="chip" style="margin-top:4px;color:var(--bad)">حذف</button>' : '') + '</div></div>';
+      }).join('');
+      $$('button[data-i]', box).forEach(function (b) {
+        b.onclick = function () {
+          var x = r.rows[Number(b.getAttribute('data-i'))];
+          sheet('<h2>حذف هذه الحركة؟</h2><div class="sum">' + esc(x.t) + (x.p ? ' · ' + esc(x.p) : '') + '<br>' + fmt(x.a) + ' ر.ع · ' + esc(x.d) + (x.nt ? '<br>' + esc(x.nt) : '') + '<br>سيتغير رصيد النقد.</div><button class="act dng" style="width:100%" id="ok">نعم، احذفها</button>', function (e2, c2) {
+            $('#ok', e2).onclick = function () { c2(); close(); api('delTrx', {row: x.row, t: x.t, a: x.a}).then(after); };
+          });
+        };
+      });
+    });
   });
 }
 

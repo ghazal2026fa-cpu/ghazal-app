@@ -140,3 +140,6 @@ h3{margin:0 0 10px;font-size:16px;color:var(--wine);font-weight:800}
 @keyframes sh{to{background-position:-200% 0}}
 @keyframes up{from{transform:translateY(40px);opacity:.4}}
 @keyframes fd{from{opacity:0}}
+
+.bt[data-b]{cursor:pointer}
+.pk{border-bottom:1px solid var(--line)}
