@@ -211,6 +211,7 @@ function renderBody() {
 function openMenu() {
   sheet('<h2>' + esc(S.name || '') + '</h2><div class="menu">' +
     '<button id="m3"><span class="i">☰</span><div>سجل الحركات<small>المصروفات والنقد والمسحوبات، مع حذف ما سُجّل بالخطأ</small></div></button>' +
+    '<button id="m5"><span class="i">▤</span><div>الشحنات والموردين<small>شحنة جديدة، قطع، رسوم، وصول، دفعات أسامة</small></div></button>' +
     '<button id="m4"><span class="i">⚙</span><div>الإعدادات<small>بوتيك جديد، الرقم السري، ذاكرة الصور</small></div></button>' +
     '<button id="m1"><span class="i">↻</span><div>تحديث البيانات<small>سحب آخر الأرقام من الشيت</small></div></button>' +
     '<button id="m2"><span class="i">⎋</span><div>تسجيل الخروج<small>على هذا الجهاز</small></div></button></div>', function (el, close) {
@@ -218,6 +219,7 @@ function openMenu() {
     $('#m2', el).onclick = function () { close(); logout(); };
     $('#m3', el).onclick = function () { close(); logSheet(); };
     $('#m4', el).onclick = function () { close(); settingsSheet(); };
+    $('#m5', el).onclick = function () { close(); shipsSheet(); };
   });
 }
 
@@ -542,7 +544,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 4</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 5</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -597,8 +599,79 @@ function logSheet() {
   });
 }
 
+/* ---------- shipments & suppliers ---------- */
+function res3(r, okFn) { if (r && r.ok) { toast(r.msg || 'تم'); return loadAll(true).then(function () { if (okFn) okFn(); }); } toast((r && r.msg) || 'لم تتم العملية', true); }
+function shipsSheet() {
+  sheet('<h2>الشحنات والموردين</h2><div class="acts" style="margin-top:0"><button class="act pri" id="sn">شحنة جديدة</button><button class="act" id="sp">دفعة / مشتريات أسامة</button></div><div id="sl"><div class="sk"></div><div class="sk"></div></div>', function (el, close) {
+    $('#sn', el).onclick = function () { close(); newShipSheet(); };
+    $('#sp', el).onclick = function () { close(); supplierSheet(); };
+    api('ships', null, {silent: true}).then(function (r) {
+      var box = $('#sl', el); if (!box) return;
+      if (!r || !r.ok) { box.innerHTML = '<div class="empty">' + esc((r && r.msg) || 'تعذر التحميل') + '</div>'; return; }
+      box.innerHTML = '<div class="kv"><span>المتبقي علينا لأسامة</span><b>' + fmt(r.supLeft) + ' ر.ع</b></div>' + (r.ships.length ? r.ships.map(function (x, i) {
+        return '<div class="bt" data-i="' + i + '" style="cursor:pointer"><div><div class="n">شحنة ' + esc(x.id) + ' ‹</div><div class="m">' + esc(x.s) + ' · ' + fmt0(x.n) + ' قطعة · ' + esc(x.d) + '</div></div><div class="o">' + esc(x.st || '-') + '<div class="m">' + fmt(x.tot) + '</div></div></div>';
+      }).join('') : '<div class="empty">لا توجد شحنات</div>');
+      $$('.bt[data-i]', box).forEach(function (b) { b.onclick = function () { var x = r.ships[Number(b.getAttribute('data-i'))]; close(); shipSheet(x); }; });
+    });
+  });
+}
+function newShipSheet() {
+  sheet('<h2>شحنة جديدة</h2><div class="f"><label>رقم الشحنة</label><input id="id" placeholder="مثال: 1126"></div><div class="f"><label>اسم المورد</label><input id="nm" placeholder="مثال: مورد الصين"></div><button class="act pri" style="width:100%" id="ok">إنشاء الشحنة</button><div class="stale" style="margin-top:12px">تُنشأ بحالة «في الطريق». بعدها أضف قطعها.</div>', function (el, close) {
+    $('#ok', el).onclick = function () {
+      var id = $('#id', el).value.trim(), nm = $('#nm', el).value.trim();
+      if (!id || !nm) return toast('اكتب رقم الشحنة والمورد', true);
+      close(); api('newShip', {id: id, name: nm}).then(function (r) { res3(r, function () { shipSheet({id: id, s: nm, n: 0, st: 'في الطريق', ship: 0, conv: 0, insp: 0, tot: 0}); }); });
+    };
+  });
+}
+function shipSheet(x) {
+  var transit = x.st !== 'وصلت';
+  sheet('<h2>شحنة ' + esc(x.id) + '</h2><div class="card"><div class="kv"><span>المورد</span><b>' + esc(x.s) + '</b></div><div class="kv"><span>الحالة</span><b>' + esc(x.st || '-') + '</b></div><div class="kv"><span>القطع</span><b>' + fmt0(x.n) + '</b></div>' +
+    '<div class="kv"><span>الشحن</span><b>' + fmt(x.ship) + '</b></div><div class="kv"><span>عمولة التحويل</span><b>' + fmt(x.conv) + '</b></div><div class="kv"><span>عمولة الفحص والوسيط</span><b>' + fmt(x.insp) + '</b></div><div class="kv"><span>إجمالي التكلفة</span><b>' + fmt(x.tot) + '</b></div></div>' +
+    '<div class="acts"><button class="act pri" id="p">إضافة قطع</button><button class="act" id="f">تسجيل رسوم</button>' + (transit ? '<button class="act full" id="a">تسجيل وصول الشحنة</button>' : '') + '</div>', function (el, close) {
+    $('#p', el).onclick = function () { close(); shipPiecesSheet(x); };
+    $('#f', el).onclick = function () { close(); shipFeeSheet(x); };
+    if (transit) $('#a', el).onclick = function () { close(); arriveSheet(x); };
+  });
+}
+function shipPiecesSheet(x) {
+  sheet('<h2>قطع للشحنة ' + esc(x.id) + '</h2><div class="f"><label>الوصف (الموديل - اللون - التفاصيل)</label><input id="ds"></div><div class="f"><label>العدد (1 إلى 60)</label><input id="q" type="number" inputmode="numeric"></div>' + numField('b', 'سعر الشراء للقطعة (ر.ع)') + numField('s', 'سعر البيع المعتمد (ر.ع)') +
+    '<button class="act pri" style="width:100%" id="ok">إضافة</button><div class="stale" style="margin-top:12px">تُنشأ الأكواد تلقائياً، وبعدها صوّر كل قطعة من المخزون.</div>', function (el, close) {
+    $('#ok', el).onclick = function () {
+      var ds = $('#ds', el).value.trim(), q = Math.floor(Number($('#q', el).value)), b = Number($('#b', el).value), sp = Number($('#s', el).value);
+      if (!ds) return toast('اكتب الوصف', true); if (!(q >= 1 && q <= 60)) return toast('العدد من 1 إلى 60', true); if (!(b > 0) || !(sp > 0)) return toast('اكتب سعر الشراء وسعر البيع', true);
+      close(); api('shipPieces', {id: x.id, qty: q, buy: b, sale: sp, desc: ds}).then(function (r) { res3(r); });
+    };
+  });
+}
+function shipFeeSheet(x) {
+  sheet('<h2>رسوم الشحنة ' + esc(x.id) + '</h2><div class="f"><label>نوع الرسم</label><select id="k"><option value="ship">الشحن</option><option value="conv">عمولة التحويل</option><option value="insp">عمولة الفحص والوسيط</option></select></div>' + numField('a', 'المبلغ الإجمالي لهذا الرسم (ر.ع)') +
+    '<div class="stale">اكتب الإجمالي وليس الإضافة. إن كان مسجلاً سابقاً يُحتسب الفرق فقط ويُخصم من نقد المشروع، ويُوزَّع على القطع بنسبة سعرها.</div><button class="act pri" style="width:100%;margin-top:12px" id="ok">حفظ</button>', function (el, close) {
+    $('#ok', el).onclick = function () {
+      var a = Number($('#a', el).value); if (!(a >= 0) || $('#a', el).value === '') return toast('اكتب المبلغ', true);
+      close(); api('shipFee', {id: x.id, kind: $('#k', el).value, amount: a}).then(function (r) { res3(r); });
+    };
+  });
+}
+function arriveSheet(x) {
+  sheet('<h2>وصول الشحنة ' + esc(x.id) + '</h2><div class="sum">ستنتقل كل قطع الشحنة من «في الطريق» إلى المخزن الرئيسي.</div>' + numField('a', 'رسوم الشحن (اختياري، ر.ع)') + '<button class="act pri" style="width:100%" id="ok">تأكيد الوصول</button>', function (el, close) {
+    $('#ok', el).onclick = function () { var a = Number($('#a', el).value) || 0; close(); api('arrive', {id: x.id, ship: a}).then(function (r) { res3(r); }); };
+  });
+}
+function supplierSheet() {
+  sheet('<h2>أسامة راجح</h2><div class="f"><label>العملية</label><select id="t"><option value="pay">سداد دفعة له</option><option value="buy">مشتريات منه (تزيد المستحق)</option></select></div>' + numField('a', 'المبلغ') +
+    '<div class="f"><label>العملة</label><select id="c"><option>سعودي</option><option>يمني</option><option>عماني</option></select></div><div class="f"><label>ملاحظة (اختياري)</label><input id="n"></div>' +
+    '<label class="row-ck" id="pr"><input type="checkbox" id="p"> مدفوعة من مال شخصي (لا تُخصم من نقد المشروع)</label><button class="act pri" style="width:100%" id="ok">حفظ</button>', function (el, close) {
+    $('#ok', el).onclick = function () {
+      var a = Number($('#a', el).value); if (!(a > 0)) return toast('اكتب المبلغ', true);
+      var t = $('#t', el).value;
+      close(); api('supPay', {type: t, amount: a, cur: $('#c', el).value, note: $('#n', el).value.trim(), personal: t === 'pay' && $('#p', el).checked}).then(function (r) { res3(r); });
+    };
+  });
+}
+
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=4').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=5').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
