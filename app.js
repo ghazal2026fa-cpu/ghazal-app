@@ -544,7 +544,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 5</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 6</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -635,10 +635,18 @@ function shipSheet(x) {
   });
 }
 function shipPiecesSheet(x) {
-  sheet('<h2>قطع للشحنة ' + esc(x.id) + '</h2><div class="f"><label>الوصف (الموديل - اللون - التفاصيل)</label><input id="ds"></div><div class="f"><label>العدد (1 إلى 60)</label><input id="q" type="number" inputmode="numeric"></div>' + numField('b', 'سعر الشراء للقطعة (ر.ع)') + numField('s', 'سعر البيع المعتمد (ر.ع)') +
+  sheet('<h2>قطع للشحنة ' + esc(x.id) + '</h2><div class="f"><label>الوصف (الموديل - اللون - التفاصيل)</label><input id="ds"></div><div class="f"><label>العدد (1 إلى 60)</label><input id="q" type="number" inputmode="numeric"></div>' + '<div class="f"><label>سعر الشراء للقطعة</label><div style="display:flex;gap:8px"><input id="b" type="number" inputmode="decimal" step="0.001" style="flex:1"><select id="bc" style="width:110px"><option value="omr">ر.ع</option><option value="cny">يوان</option></select></div></div>' +
+    '<div class="f" id="rw" style="display:none"><label>سعر الصرف: كم يوان لكل 1 ر.ع (حسب تحويلك للصراري)</label><input id="rt" type="number" inputmode="decimal" step="0.0001" value="' + (ls('gz_cny') || '') + '"><div class="stale" id="cv" style="margin-top:6px"></div></div>' + numField('s', 'سعر البيع المعتمد (ر.ع)') +
     '<button class="act pri" style="width:100%" id="ok">إضافة</button><div class="stale" style="margin-top:12px">تُنشأ الأكواد تلقائياً، وبعدها صوّر كل قطعة من المخزون.</div>', function (el, close) {
+    function conv() {
+      var cny = $('#bc', el).value === 'cny'; $('#rw', el).style.display = cny ? '' : 'none';
+      var y = Number($('#b', el).value), r = Number($('#rt', el).value);
+      $('#cv', el).textContent = cny && y > 0 && r > 0 ? ('= ' + fmt(y / r) + ' ر.ع للقطعة') : '';
+    }
+    ['#bc', '#b', '#rt'].forEach(function (k) { $(k, el).oninput = conv; $(k, el).onchange = conv; });
     $('#ok', el).onclick = function () {
       var ds = $('#ds', el).value.trim(), q = Math.floor(Number($('#q', el).value)), b = Number($('#b', el).value), sp = Number($('#s', el).value);
+      if ($('#bc', el).value === 'cny') { var rt = Number($('#rt', el).value); if (!(rt > 0)) return toast('اكتب سعر الصرف', true); ls('gz_cny', String(rt)); b = Math.round(b / rt * 1000) / 1000; }
       if (!ds) return toast('اكتب الوصف', true); if (!(q >= 1 && q <= 60)) return toast('العدد من 1 إلى 60', true); if (!(b > 0) || !(sp > 0)) return toast('اكتب سعر الشراء وسعر البيع', true);
       close(); api('shipPieces', {id: x.id, qty: q, buy: b, sale: sp, desc: ds}).then(function (r) { res3(r); });
     };
@@ -671,7 +679,7 @@ function supplierSheet() {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=5').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=6').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
