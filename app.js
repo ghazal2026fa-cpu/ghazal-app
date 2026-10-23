@@ -111,12 +111,22 @@ function compress(file, max, q) {
 }
 function pickPhoto() {
   return new Promise(function (res) {
-    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('capture', 'environment');
-    inp.onchange = function () {
-      var f = inp.files && inp.files[0]; if (!f) return res(null);
-      busy(true); compress(f).then(function (d) { busy(false); res(d); }).catch(function () { busy(false); toast('تعذر قراءة الصورة', true); res(null); });
-    };
-    inp.click();
+    var done = false;
+    function take(cam, close) {
+      var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+      if (cam) inp.setAttribute('capture', 'environment');
+      inp.onchange = function () {
+        var f = inp.files && inp.files[0]; if (!f) return res(null);
+        done = true; busy(true); compress(f).then(function (d) { busy(false); res(d); }).catch(function () { busy(false); toast('تعذر قراءة الصورة', true); res(null); });
+      };
+      inp.click(); close();
+    }
+    sheet('<h2>مصدر الصورة</h2><div class="menu"><button id="pc"><span class="i">◉</span><div>الكاميرا<small>تصوير القطعة الآن</small></div></button>' +
+      '<button id="pg"><span class="i">▣</span><div>الاستوديو<small>اختيار صورة من الهاتف</small></div></button></div>', function (el, close) {
+      $('#pc', el).onclick = function () { take(true, close); };
+      $('#pg', el).onclick = function () { take(false, close); };
+      el.parentNode.addEventListener('click', function (e) { if (e.target === el.parentNode && !done) res(null); });
+    });
   });
 }
 
