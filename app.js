@@ -363,7 +363,7 @@ function sellSheet(it) {
     $('#dv', el).oninput = dsc; $('#dk', el).onchange = dsc;
     $('#ok', el).onclick = function () {
       var p = Number(pr.value); if (!(p > 0)) return toast('اكتب سعراً صحيحاً', true);
-      close(); api('sell', {code: it.c, price: p}).then(function (r) { if (r && r.ok && r.profit != null) r.msg += ' · الربح ' + fmt(r.profit); after(r); });
+      close(); api('sell', {code: it.c, price: p}).then(function (r) { if (r && r.ok && r.profit != null) r.msg += ' · الربح ' + fmt(r.profit); after(r).then(function (ok) { if (ok) offerInvoice([it.c]); }); });
     };
   });
 }
@@ -512,7 +512,8 @@ function runSellMany(list) {
   api('sellMany', {items: list}).then(function (r) {
     if (r && r.ok && r.profit != null) r.msg += ' · الربح ' + fmt(r.profit);
     if (r && r.results) { var bad = r.results.filter(function (x) { return !x.ok; }); if (bad.length) r.msg += ' — لم تُسجَّل: ' + bad.map(function (x) { return x.code + ' (' + x.msg + ')'; }).join('، '); }
-    after(r);
+    var codes = (r && r.results ? r.results.filter(function (x) { return x.ok; }).map(function (x) { return x.code; }) : []);
+    after(r).then(function (ok) { if (ok && codes.length) offerInvoice(codes); });
   });
 }
 
@@ -563,7 +564,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 9</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 10</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -800,6 +801,12 @@ function drawInvoice(items, cust, no, dateStr, logo) {
   ctx.fillStyle = '#888'; ctx.font = '18px ' + f; ctx.fillText('مسقط، سلطنة عُمان', W / 2, y + 34);
   return c;
 }
+function offerInvoice(codes) {
+  var its = codes.map(byCode).filter(function (i) { return i && i.st === 'مباع'; }); if (!its.length) return;
+  sheet('<h2>تم البيع</h2><div class="sum">هل تريد إصدار فاتورة للعميل؟</div><div class="acts" style="margin-top:0"><button class="act pri" id="y">إصدار فاتورة</button><button class="act" id="n">لا، شكراً</button></div>', function (el, close) {
+    $('#n', el).onclick = close; $('#y', el).onclick = function () { close(); invoiceSheet(its); };
+  });
+}
 function invoiceSheet(items) {
   var d = new Date(), pad = function (n) { return ('0' + n).slice(-2); };
   var no = 'GF-' + String(d.getFullYear()).slice(2) + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' + pad(d.getHours()) + pad(d.getMinutes());
@@ -829,7 +836,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=9').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=10').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
