@@ -346,11 +346,17 @@ function after(r, okMsg) {
   if (r && r.ok) { toast(r.msg || okMsg || 'تم'); S.sel = {}; S.select = false; return loadAll(true).then(function () { return true; }); }
   toast((r && r.msg) || 'لم تتم العملية', true); return Promise.resolve(false);
 }
+function discPrice(sp, kind, v) { v = Number(v) || 0; var p = kind === 'pct' ? sp * (1 - v / 100) : sp - v; return Math.max(0, Math.round(p * 1000) / 1000); }
+function discRow(idp) {
+  return '<div class="f"><label>خصم (اختياري)</label><div style="display:flex;gap:8px"><select id="' + idp + 'k" style="width:120px"><option value="pct">نسبة %</option><option value="amt">مبلغ ر.ع</option></select><input id="' + idp + 'v" type="number" inputmode="decimal" step="0.001" placeholder="مثال: 10" style="flex:1"></div></div>';
+}
 function sellSheet(it) {
   sheet('<h2>بيع القطعة</h2><div class="sum">' + esc(it.c) + ' · ' + esc(it.d) + '<br>التكلفة ' + fmt(it.tc) + ' · السعر المعتمد ' + fmt(it.sp) + (it.loc && it.loc !== 'المخزن الرئيسي' ? '<br>في ' + esc(it.loc) + ' — يُستلم المبلغ منه' : '') + '</div>' +
-    '<div class="f"><label>سعر البيع الفعلي (ر.ع)</label><input id="pr" type="number" inputmode="decimal" step="0.001" value="' + it.sp + '"></div>' +
+    discRow('d') + '<div class="f"><label>سعر البيع الفعلي (ر.ع)</label><input id="pr" type="number" inputmode="decimal" step="0.001" value="' + it.sp + '"></div>' +
     '<div class="sum" id="pf"></div><button class="act pri" style="width:100%" id="ok">تأكيد البيع</button>', function (el, close) {
-    var pr = $('#pr', el); function upd() { var p = Number(pr.value) || 0; $('#pf', el).textContent = 'الربح المتوقع: ' + fmt(p - it.tc) + ' ر.ع' + (p < it.sp ? ' (خصم ' + fmt(it.sp - p) + ')' : ''); } pr.oninput = upd; upd();
+    var pr = $('#pr', el); function upd() { var p = Number(pr.value) || 0; $('#pf', el).textContent = 'الربح المتوقع: ' + fmt(p - it.tc) + ' ر.ع' + (p < it.sp ? ' (خصم ' + fmt(it.sp - p) + ')' : ''); } pr.oninput = function () { $('#dv', el).value = ''; upd(); }; upd();
+    function dsc() { var v = $('#dv', el).value; pr.value = v === '' ? it.sp : discPrice(it.sp, $('#dk', el).value, v); upd(); }
+    $('#dv', el).oninput = dsc; $('#dk', el).onchange = dsc;
     $('#ok', el).onclick = function () {
       var p = Number(pr.value); if (!(p > 0)) return toast('اكتب سعراً صحيحاً', true);
       close(); api('sell', {code: it.c, price: p}).then(function (r) { if (r && r.ok && r.profit != null) r.msg += ' · الربح ' + fmt(r.profit); after(r); });
@@ -466,7 +472,7 @@ function pickPieces(o) {
   if (!o.items.length) return toast('لا توجد قطع', true);
   sheet('<h2>' + esc(o.title) + '</h2><div class="sum" id="ps"></div><div class="f"><input id="pq" type="search" placeholder="بحث بالوصف أو الكود"></div><div id="pl">' +
     o.items.map(function (i) {
-      return '<label class="row-ck pk" data-c="' + esc(i.c) + '" data-s="' + esc((i.c + ' ' + i.d).toLowerCase()) + '"><input type="checkbox"' + (o.all ? ' checked' : '') + '>' +
+      return '<label class="row-ck pk" data-c="' + esc(i.c) + '" data-sp="' + i.sp + '" data-s="' + esc((i.c + ' ' + i.d).toLowerCase()) + '"><input type="checkbox"' + (o.all ? ' checked' : '') + '>' +
         '<span style="flex:1;font-size:14px;line-height:1.35">' + esc(i.d) + '<br><small style="color:var(--mute);direction:ltr;display:inline-block">' + esc(i.c) + '</small></span>' +
         (o.withPrice ? '<input class="pp" type="number" inputmode="decimal" step="0.001" value="' + i.sp + '" style="width:86px;padding:8px;border-radius:10px;border:1.5px solid var(--line);text-align:center">' : '<b>' + fmt(i.sp) + '</b>') + '</label>';
     }).join('') + '</div><button class="act pri" style="width:100%;margin-top:12px" id="ok">' + esc(o.label) + '</button>', function (el, close) {
@@ -478,6 +484,14 @@ function pickPieces(o) {
     $$('.pk input', el).forEach(function (x) { x.oninput = sum; x.onchange = sum; });
     $('#pq', el).oninput = function () { var q = this.value.trim().toLowerCase(); $$('.pk', el).forEach(function (r) { r.style.display = (!q || r.getAttribute('data-s').indexOf(q) >= 0) ? '' : 'none'; }); };
     sum();
+    if (o.withPrice) $('#bd', el).onclick = function () {
+      var v = $('#bv', el).value; if (v === '' || !(Number(v) >= 0)) return toast('اكتب قيمة الخصم', true);
+      var n = 0; $$('.pk', el).forEach(function (r) {
+        if (!$('input[type=checkbox]', r).checked) return;
+        var sp = Number(r.getAttribute('data-sp')); $('.pp', r).value = discPrice(sp, $('#bk', el).value, v); n++;
+      });
+      sum(); toast(n ? 'تم تطبيق الخصم على ' + n + ' قطعة' : 'حدّد قطعاً أولاً', !n);
+    };
     $('#ok', el).onclick = function () {
       var list = [];
       $$('.pk', el).forEach(function (r) {
@@ -544,7 +558,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 7</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 8</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -679,7 +693,7 @@ function supplierSheet() {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=7').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=8').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
