@@ -329,7 +329,7 @@ function openItem(code) {
     '<div class="kv"><span>التكلفة الكلية</span><b>' + fmt(it.tc) + '</b></div>';
   if (k === 'sold') rows += '<div class="kv"><span>بيعت بـ</span><b>' + fmt(it.ap) + '</b></div><div class="kv"><span>الربح</span><b class="' + ((it.pf || 0) >= 0 ? 'pos' : 'neg') + '">' + (it.pf == null ? '-' : fmt(it.pf)) + '</b></div><div class="kv"><span>القناة · التاريخ</span><b>' + esc(it.ch) + ' · ' + esc(it.sd) + '</b></div>';
   var acts = '';
-  if (k === 'main') acts = '<button class="act pri" id="a-sell">بيع</button><button class="act" id="a-move">نقل لبوتيك</button>';
+  if (k === 'main') acts = '<button class="act pri" id="a-sell">بيع</button><button class="act" id="a-move">نقل لبوتيك</button><button class="act full" id="a-gift">تسجيل كهدية (بدون بيع)</button>';
   else if (k === 'bt') acts = '<button class="act pri" id="a-sell">بيع</button><button class="act" id="a-back">إرجاع للمخزن</button><button class="act full" id="a-move">نقل لبوتيك آخر</button>';
   else if (k === 'sold') acts = '<button class="act pri full" id="a-inv">إصدار فاتورة للعميل</button><button class="act dng full" id="a-unsell">إلغاء البيع</button>';
   acts += '<button class="act" id="a-edit">تعديل الوصف والسعر</button><button class="act" id="a-photo">' + (it.ph ? 'تغيير الصورة' : 'تصوير القطعة') + '</button>';
@@ -344,6 +344,7 @@ function openItem(code) {
     on('#a-photo', function () { photoFlow(it); });
     on('#a-edit', function () { editSheet(it); });
     on('#a-inv', function () { invoiceSheet([it]); });
+    on('#a-gift', function () { giftSheet(it); });
   });
 }
 function after(r, okMsg) {
@@ -364,6 +365,15 @@ function sellSheet(it) {
     $('#ok', el).onclick = function () {
       var p = Number(pr.value); if (!(p > 0)) return toast('اكتب سعراً صحيحاً', true);
       close(); api('sell', {code: it.c, price: p}).then(function (r) { if (r && r.ok && r.profit != null) r.msg += ' · الربح ' + fmt(r.profit); after(r).then(function (ok) { if (ok) offerInvoice([it.c]); }); });
+    };
+  });
+}
+function giftSheet(it) {
+  sheet('<h2>تسجيل هدية</h2><div class="sum">' + esc(it.c) + ' · ' + esc(it.d) + '<br>تخرج من المخزون بتكلفتها ' + fmt(it.tc) + ' ر.ع، ولا تُحسب بيعاً ولا خصماً، وتُخصم تكلفتها من ربح الشهر.</div>' +
+    '<div class="f"><label>لمن الهدية، وما السبب؟</label><input id="nt" placeholder="مثال: هدية لأم سالم - مقابل هدية قدمتها لنا"></div><button class="act pri" style="width:100%" id="ok">تأكيد الهدية</button>', function (el, close) {
+    $('#ok', el).onclick = function () {
+      var nt = $('#nt', el).value.trim(); if (!nt) return toast('اكتب لمن الهدية والسبب', true);
+      close(); api('gift', {code: it.c, note: nt}).then(after);
     };
   });
 }
@@ -564,7 +574,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 10</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 11</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -836,7 +846,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=10').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=11').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
