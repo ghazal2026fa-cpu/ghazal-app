@@ -213,6 +213,7 @@ function openMenu() {
     '<button id="m3"><span class="i">☰</span><div>سجل الحركات<small>المصروفات والنقد والمسحوبات، مع حذف ما سُجّل بالخطأ</small></div></button>' +
     '<button id="m5"><span class="i">▤</span><div>الشحنات والموردين<small>شحنة جديدة، قطع، رسوم، وصول، دفعات أسامة</small></div></button>' +
     '<button id="m6"><span class="i">❏</span><div>الأرشيف والإيصالات<small>تحويلات، فواتير مشتريات، فواتير البوتيك، مرجع وحفظ</small></div></button>' +
+    '<button id="m8"><span class="i">⇄</span><div>ديون الأشخاص<small>ما اقترضته للمشروع، وسداده، وكم عليك لكل شخص</small></div></button>' +
     '<button id="m7"><span class="i">☎</span><div>عملاء البيع الآجل<small>من لم يسدد بعد، وتسجيل دفعاتهم</small></div></button>' +
     '<button id="m4"><span class="i">⚙</span><div>الإعدادات<small>بوتيك جديد، الرقم السري، ذاكرة الصور</small></div></button>' +
     '<button id="m1"><span class="i">↻</span><div>تحديث البيانات<small>سحب آخر الأرقام من الشيت</small></div></button>' +
@@ -224,6 +225,7 @@ function openMenu() {
     $('#m5', el).onclick = function () { close(); shipsSheet(); };
     $('#m6', el).onclick = function () { close(); archiveSheet(); };
     $('#m7', el).onclick = function () { close(); creditSheet(); };
+    $('#m8', el).onclick = function () { close(); debtsSheet(); };
   });
 }
 
@@ -402,6 +404,35 @@ function creditSheet() {
         };
       });
     });
+  });
+}
+function debtsSheet() {
+  sheet('<h2>ديون الأشخاص</h2><div id="db"><div class="sk"></div><div class="sk"></div></div>', function (el, close) {
+    api('debts', null, {silent: true}).then(function (r) {
+      var box = $('#db', el); if (!box) return;
+      if (!r || !r.ok) { box.innerHTML = '<div class="empty">' + esc((r && r.msg) || 'تعذر التحميل') + '</div>'; return; }
+      box.innerHTML = '<div class="sum">إجمالي ما عليك للأشخاص: <b>' + fmt(r.total) + ' ر.ع</b></div><button class="act pri" style="width:100%;margin-bottom:10px" id="dn">تسجيل دين جديد (استلمت مبلغاً)</button>' +
+        (r.people.length ? r.people.map(function (x, i) {
+          return '<div class="bt" data-i="' + i + '" style="cursor:pointer"><div><div class="n">' + esc(x.n) + (x.left > 0 ? ' ‹' : '') + '</div><div class="m">استلمت ' + fmt(x.got) + ' · سددت ' + fmt(x.paid) + '</div></div><div class="o">' + fmt(x.left) + '<div class="m">' + (x.left > 0 ? 'متبقٍ عليك' : 'مسدَّد') + '</div></div></div>';
+        }).join('') : '<div class="empty">لا توجد ديون مسجلة</div>');
+      $('#dn', box).onclick = function () { close(); debtSheet(null); };
+      $$('.bt[data-i]', box).forEach(function (b) {
+        b.onclick = function () { var x = r.people[Number(b.getAttribute('data-i'))]; if (x.left > 0) { close(); debtSheet(x); } };
+      });
+    });
+  });
+}
+function debtSheet(x) {
+  var out = !!x;
+  sheet('<h2>' + (out ? 'سداد دين إلى ' + esc(x.n) : 'دين جديد للمشروع') + '</h2>' + (out ? '<div class="sum">المتبقي عليك ' + fmt(x.left) + ' ر.ع</div>' : '<div class="f"><label>اسم الشخص</label><input id="pn"></div>') +
+    numField('am', out ? 'المبلغ المسدَّد (ر.ع)' : 'المبلغ المستلم (ر.ع)') + '<div class="f"><label>ملاحظة (السبب أو الاتفاق)</label><input id="nt"></div>' +
+    '<label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" id="cs" checked> ' + (out ? 'سُدِّد من نقد المشروع (يُخصم من الصندوق)' : 'دخل نقد المشروع (يزيد الصندوق)') + '</label><div class="stale">أزل العلامة إذا لم يمر المبلغ بالصندوق، مثل أن يدفع الشخص عنك مباشرة لمورد.</div><button class="act pri" style="width:100%;margin-top:12px" id="ok">تسجيل</button>', function (el, close) {
+    if (out) $('#am', el).value = x.left;
+    $('#ok', el).onclick = function () {
+      var p = out ? x.n : $('#pn', el).value.trim(), a = Number($('#am', el).value);
+      if (!p) return toast('اكتب اسم الشخص', true); if (!(a > 0)) return toast('اكتب المبلغ', true);
+      close(); api('debtAdd', {kind: out ? 'out' : 'in', person: p, amount: a, note: $('#nt', el).value.trim(), cash: $('#cs', el).checked}).then(function (r) { res3(r, debtsSheet); });
+    };
   });
 }
 function giftSheet(it) {
@@ -612,7 +643,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 15</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 16</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -643,7 +674,7 @@ function pinSheet() {
     };
   });
 }
-var DELETABLE = {'مصروف تشغيلي': 1, 'استلام نقد': 1, 'مسحوبات شخصية': 1, 'قسط الشقة': 1};
+var DELETABLE = {'مصروف تشغيلي': 1, 'استلام نقد': 1, 'مسحوبات شخصية': 1, 'قسط الشقة': 1, 'دين مستلم': 1, 'سداد دين': 1};
 function logSheet() {
   sheet('<h2>سجل الحركات</h2><div id="lg"><div class="sk"></div><div class="sk"></div></div>', function (el, close) {
     api('trx', {n: 60}, {silent: true}).then(function (r) {
@@ -651,7 +682,7 @@ function logSheet() {
       if (!r || !r.ok) { box.innerHTML = '<div class="empty">' + esc((r && r.msg) || 'تعذر التحميل') + '</div>'; return; }
       if (!r.rows.length) { box.innerHTML = '<div class="empty">لا توجد حركات</div>'; return; }
       box.innerHTML = r.rows.map(function (x, i) {
-        var inn = x.t === 'استلام نقد';
+        var inn = x.t === 'استلام نقد' || x.t === 'دين مستلم';
         return '<div class="bt"><div><div class="n">' + esc(x.t) + (x.p ? ' · ' + esc(x.p) : '') + '</div><div class="m">' + esc(x.d) + (x.nt ? ' · ' + esc(x.nt) : '') + '</div></div>' +
           '<div class="o ' + (inn ? 'pos' : '') + '">' + (inn ? '+' : '') + fmt(x.a) + (DELETABLE[x.t] ? '<br><button data-i="' + i + '" class="chip" style="margin-top:4px;color:var(--bad)">حذف</button>' : '') + '</div></div>';
       }).join('');
@@ -921,7 +952,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=15').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=16').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
