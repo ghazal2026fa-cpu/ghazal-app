@@ -213,6 +213,7 @@ function openMenu() {
     '<button id="m3"><span class="i">☰</span><div>سجل الحركات<small>المصروفات والنقد والمسحوبات، مع حذف ما سُجّل بالخطأ</small></div></button>' +
     '<button id="m5"><span class="i">▤</span><div>الشحنات والموردين<small>شحنة جديدة، قطع، رسوم، وصول، دفعات أسامة</small></div></button>' +
     '<button id="m6"><span class="i">❏</span><div>الأرشيف والإيصالات<small>تحويلات، فواتير مشتريات، فواتير البوتيك، مرجع وحفظ</small></div></button>' +
+    '<button id="m7"><span class="i">☎</span><div>عملاء البيع الآجل<small>من لم يسدد بعد، وتسجيل دفعاتهم</small></div></button>' +
     '<button id="m4"><span class="i">⚙</span><div>الإعدادات<small>بوتيك جديد، الرقم السري، ذاكرة الصور</small></div></button>' +
     '<button id="m1"><span class="i">↻</span><div>تحديث البيانات<small>سحب آخر الأرقام من الشيت</small></div></button>' +
     '<button id="m2"><span class="i">⎋</span><div>تسجيل الخروج<small>على هذا الجهاز</small></div></button></div>', function (el, close) {
@@ -222,6 +223,7 @@ function openMenu() {
     $('#m4', el).onclick = function () { close(); settingsSheet(); };
     $('#m5', el).onclick = function () { close(); shipsSheet(); };
     $('#m6', el).onclick = function () { close(); archiveSheet(); };
+    $('#m7', el).onclick = function () { close(); creditSheet(); };
   });
 }
 
@@ -357,15 +359,49 @@ function discRow(idp) {
 }
 function sellSheet(it) {
   sheet('<h2>بيع القطعة</h2><div class="sum">' + esc(it.c) + ' · ' + esc(it.d) + '<br>التكلفة ' + fmt(it.tc) + ' · السعر المعتمد ' + fmt(it.sp) + (it.loc && it.loc !== 'المخزن الرئيسي' ? '<br>في ' + esc(it.loc) + ' — يُستلم المبلغ منه' : '') + '</div>' +
-    discRow('d') + '<div class="f"><label>سعر البيع الفعلي (ر.ع)</label><input id="pr" type="number" inputmode="decimal" step="0.001" value="' + it.sp + '"></div>' +
+    discRow('d') + (it.loc && it.loc !== 'المخزن الرئيسي' ? '' : '<label class="row-ck"><input type="checkbox" id="cr"> بيع آجل (لم يُستلم المبلغ بعد)</label><div class="f" id="crn" style="display:none"><label>اسم العميل</label><input id="cn" placeholder="مثال: أخت زوجتي"></div>') + '<div class="f"><label>سعر البيع الفعلي (ر.ع)</label><input id="pr" type="number" inputmode="decimal" step="0.001" value="' + it.sp + '"></div>' +
     '<div class="sum" id="pf"></div><button class="act pri" style="width:100%" id="ok">تأكيد البيع</button>', function (el, close) {
     var pr = $('#pr', el); function upd() { var p = Number(pr.value) || 0; $('#pf', el).textContent = 'الربح المتوقع: ' + fmt(p - it.tc) + ' ر.ع' + (p < it.sp ? ' (خصم ' + fmt(it.sp - p) + ')' : ''); } pr.oninput = function () { $('#dv', el).value = ''; upd(); }; upd();
     function dsc() { var v = $('#dv', el).value; pr.value = v === '' ? it.sp : discPrice(it.sp, $('#dk', el).value, v); upd(); }
     $('#dv', el).oninput = dsc; $('#dk', el).onchange = dsc;
+    if ($('#cr', el)) $('#cr', el).onchange = function () { $('#crn', el).style.display = this.checked ? '' : 'none'; };
     $('#ok', el).onclick = function () {
       var p = Number(pr.value); if (!(p > 0)) return toast('اكتب سعراً صحيحاً', true);
-      close(); api('sell', {code: it.c, price: p}).then(function (r) { if (r && r.ok && r.profit != null) r.msg += ' · الربح ' + fmt(r.profit); after(r).then(function (ok) { if (ok) offerInvoice([it.c]); }); });
+      var cr = $('#cr', el) && $('#cr', el).checked, cn = cr ? $('#cn', el).value.trim() : '';
+      if (cr && !cn) return toast('اكتب اسم العميل للبيع الآجل', true);
+      close(); api('sell', {code: it.c, price: p, credit: cn}).then(function (r) { if (r && r.ok && r.profit != null) r.msg += ' · الربح ' + fmt(r.profit); after(r).then(function (ok) { if (ok) offerInvoice([it.c]); }); });
     };
+  });
+}
+function installmentSheet() {
+  sheet('<h2>قسط الشقة</h2><div class="sum">يُخصم من نقد المشروع ومن المتبقي في عقد الشقة، ولا يدخل في المصروفات ولا الأرباح.</div>' + numField('am', 'المبلغ (ر.ع)') + '<div class="f"><label>ملاحظة (اختياري)</label><input id="nt"></div><button class="act pri" style="width:100%" id="ok">تسجيل القسط</button>', function (el, close) {
+    $('#ok', el).onclick = function () {
+      var a = Number($('#am', el).value); if (!(a > 0)) return toast('اكتب المبلغ', true);
+      close(); api('installment', {amount: a, note: $('#nt', el).value.trim()}).then(after);
+    };
+  });
+}
+function creditSheet() {
+  sheet('<h2>عملاء البيع الآجل</h2><div id="cl"><div class="sk"></div><div class="sk"></div></div>', function (el, close) {
+    api('credit', null, {silent: true}).then(function (r) {
+      var box = $('#cl', el); if (!box) return;
+      if (!r || !r.ok) { box.innerHTML = '<div class="empty">' + esc((r && r.msg) || 'تعذر التحميل') + '</div>'; return; }
+      if (!r.customers.length) { box.innerHTML = '<div class="empty">لا يوجد بيع آجل. يُسجَّل من شاشة البيع بخيار «بيع آجل».</div>'; return; }
+      box.innerHTML = r.customers.map(function (x, i) {
+        return '<div class="bt" data-i="' + i + '" style="cursor:pointer"><div><div class="n">' + esc(x.n) + ' ‹</div><div class="m">' + fmt0(x.pcs) + ' قطعة · قيمتها ' + fmt(x.sold) + ' · سدّد ' + fmt(x.paid) + '</div></div><div class="o">' + fmt(x.left) + '<div class="m">متبقٍ</div></div></div>';
+      }).join('');
+      $$('.bt[data-i]', box).forEach(function (b) {
+        b.onclick = function () {
+          var x = r.customers[Number(b.getAttribute('data-i'))]; close();
+          sheet('<h2>دفعة من ' + esc(x.n) + '</h2><div class="sum">المتبقي عليه ' + fmt(x.left) + ' ر.ع</div>' + numField('am', 'المبلغ المستلم (ر.ع)') + '<button class="act pri" style="width:100%" id="ok">تسجيل الدفعة</button>', function (e2, c2) {
+            $('#ok', e2).onclick = function () {
+              var a = Number($('#am', e2).value); if (!(a > 0)) return toast('اكتب المبلغ', true);
+              c2(); api('cash', {party: x.n, amount: a, note: 'سداد بيع آجل'}).then(after);
+            };
+          });
+        };
+      });
+    });
   });
 }
 function giftSheet(it) {
@@ -421,7 +457,9 @@ function openAdd() {
     '<button id="x1"><span class="i">＋</span><div>قطعة جديدة<small>تصوير وإضافة للمخزون</small></div></button>' +
     '<button id="x2"><span class="i">−</span><div>مصروف تشغيلي<small>إيجار، تغليف، توصيل…</small></div></button>' +
     '<button id="x3"><span class="i">↓</span><div>استلام نقد<small>من بوتيك أو من حسابك الشخصي</small></div></button>' +
-    '<button id="x4"><span class="i">↑</span><div>سحب شخصي<small>خارج الأرباح</small></div></button></div>', function (el, close) {
+    '<button id="x4"><span class="i">↑</span><div>سحب شخصي<small>خارج الأرباح</small></div></button>' +
+    '<button id="x5"><span class="i">⌂</span><div>قسط الشقة<small>يُخصم من المتبقي في العقد ومن النقد</small></div></button></div>', function (el, close) {
+    $('#x5', el).onclick = function () { close(); installmentSheet(); };
     $('#x1', el).onclick = function () { close(); addPieceSheet(); };
     $('#x2', el).onclick = function () { close(); expenseSheet(); };
     $('#x3', el).onclick = function () { close(); cashSheet(); };
@@ -574,7 +612,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 11</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 12</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -605,7 +643,7 @@ function pinSheet() {
     };
   });
 }
-var DELETABLE = {'مصروف تشغيلي': 1, 'استلام نقد': 1, 'مسحوبات شخصية': 1};
+var DELETABLE = {'مصروف تشغيلي': 1, 'استلام نقد': 1, 'مسحوبات شخصية': 1, 'قسط الشقة': 1};
 function logSheet() {
   sheet('<h2>سجل الحركات</h2><div id="lg"><div class="sk"></div><div class="sk"></div></div>', function (el, close) {
     api('trx', {n: 60}, {silent: true}).then(function (r) {
@@ -846,7 +884,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=11').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=12').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
