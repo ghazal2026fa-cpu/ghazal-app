@@ -612,7 +612,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 12</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 13</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -813,11 +813,12 @@ function wrapText(ctx, t, w) {
   if (cur) lines.push(cur); return lines.slice(0, 3);
 }
 function drawInvoice(items, cust, no, dateStr, logo) {
+  var due = items.filter(function (i) { return String(i.ch || '').indexOf('آجل') === 0; }).reduce(function (a, i) { return a + (Number(i.ap) || 0); }, 0);
   var W = 800, P = 40, f = "'Tajawal', Arial, sans-serif", c = document.createElement('canvas'), ctx = c.getContext('2d');
   ctx.font = '22px ' + f;
   var rows = items.map(function (i) { var ap = Number(i.ap) || 0, sp = Number(i.sp) || ap; return {d: i.d, sp: sp, ds: Math.max(0, sp - ap), net: ap}; });
   rows.forEach(function (r) { r.lines = wrapText(ctx, r.d, 340); r.h = Math.max(54, r.lines.length * 30 + 22); });
-  var H = 330 + rows.reduce(function (a, r) { return a + r.h; }, 0) + 230;
+  var H = 330 + rows.reduce(function (a, r) { return a + r.h; }, 0) + 290;
   c.width = W; c.height = H; ctx = c.getContext('2d'); ctx.direction = 'rtl';
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#46112F'; ctx.fillRect(0, 0, W, 130);
@@ -845,7 +846,10 @@ function drawInvoice(items, cust, no, dateStr, logo) {
   ctx.fillStyle = '#46112F'; ctx.fillRect(P, y, W - 2 * P, 70);
   ctx.fillStyle = '#fff'; ctx.font = 'bold 30px ' + f; ctx.textAlign = 'right'; ctx.fillText('الإجمالي', W - P - 20, y + 46);
   ctx.textAlign = 'left'; ctx.fillText(fmt(tot) + ' ر.ع', P + 20, y + 46);
-  y += 120; ctx.textAlign = 'center'; ctx.fillStyle = '#46112F'; ctx.font = 'bold 24px ' + f; ctx.fillText('شكراً لتسوقكم من غزل فاشن', W / 2, y);
+  y += 100; ctx.textAlign = 'right'; ctx.font = 'bold 24px ' + f;
+  if (due > 0) { ctx.fillStyle = '#B3261E'; ctx.fillText('طريقة الدفع: آجل — المبلغ المستحق: ' + fmt(due) + ' ر.ع', W - P, y); }
+  else { ctx.fillStyle = '#2E7D32'; ctx.fillText('الحالة: مدفوعة', W - P, y); }
+  y += 60; ctx.textAlign = 'center'; ctx.fillStyle = '#46112F'; ctx.font = 'bold 24px ' + f; ctx.fillText('شكراً لتسوقكم من غزل فاشن', W / 2, y);
   ctx.fillStyle = '#888'; ctx.font = '18px ' + f; ctx.fillText('مسقط، سلطنة عُمان', W / 2, y + 34);
   return c;
 }
@@ -864,6 +868,7 @@ function invoiceSheet(items) {
       var go = function () { canvas = drawInvoice(items, $('#cu', el).value.trim(), no, ds, logo); $('#pv', el).src = canvas.toDataURL('image/jpeg', 0.9); };
       (document.fonts && document.fonts.load ? document.fonts.load("22px Tajawal").catch(function () {}) : Promise.resolve()).then(go);
     }
+    var cr0 = items.filter(function (i) { return String(i.ch || '').indexOf('آجل - ') === 0; })[0]; if (cr0) $('#cu', el).value = String(cr0.ch).slice(6);
     var im = new Image(); im.onload = function () { logo = im; render(); }; im.onerror = render; im.src = 'icons/wordmark.png';
     var t; $('#cu', el).oninput = function () { clearTimeout(t); t = setTimeout(render, 300); };
     $('#cl', el).onclick = close;
@@ -884,7 +889,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=12').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=13').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
