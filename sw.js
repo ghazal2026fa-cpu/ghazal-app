@@ -1,5 +1,5 @@
-const V = 'gz-v13';
-const SHELL = ['./', 'index.html', 'style.css?v=13', 'app.js?v=13', 'config.js?v=13', 'manifest.webmanifest', 'icons/wordmark.png', 'icons/icon-192.png'];
+const V = 'gz-v14';
+const SHELL = ['./', 'index.html', 'style.css?v=14', 'app.js?v=14', 'config.js?v=14', 'manifest.webmanifest', 'icons/wordmark.png', 'icons/icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== V).map(x => caches.delete(x)))).then(() => self.clients.claim()));

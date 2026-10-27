@@ -612,7 +612,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 13</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 14</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -696,11 +696,29 @@ function shipSheet(x) {
   var transit = x.st !== 'وصلت';
   sheet('<h2>شحنة ' + esc(x.id) + '</h2><div class="card"><div class="kv"><span>المورد</span><b>' + esc(x.s) + '</b></div><div class="kv"><span>الحالة</span><b>' + esc(x.st || '-') + '</b></div><div class="kv"><span>القطع</span><b>' + fmt0(x.n) + '</b></div>' +
     '<div class="kv"><span>الشحن</span><b>' + fmt(x.ship) + '</b></div><div class="kv"><span>عمولة التحويل</span><b>' + fmt(x.conv) + '</b></div><div class="kv"><span>عمولة الفحص والوسيط</span><b>' + fmt(x.insp) + '</b></div><div class="kv"><span>إجمالي التكلفة</span><b>' + fmt(x.tot) + '</b></div></div>' +
-    '<div class="acts"><button class="act pri" id="p">إضافة قطع</button><button class="act" id="f">تسجيل رسوم</button>' + (transit ? '<button class="act full" id="a">تسجيل وصول الشحنة</button>' : '') + '<button class="act full" id="ar">إرفاق إيصال أو فاتورة لهذه الشحنة</button></div>', function (el, close) {
+    (x.st === 'ملغاة' ? '<div class="sum">هذه الشحنة ملغاة، وقد عُكست تكاليفها في الحركات.</div>' :
+    '<div class="acts"><button class="act pri" id="p">إضافة قطع</button><button class="act" id="f">تسجيل رسوم</button>' + (transit ? '<button class="act full" id="a">تسجيل وصول الشحنة</button>' : '') + '<button class="act full" id="ar">إرفاق إيصال أو فاتورة لهذه الشحنة</button><button class="act full" id="ed">تعديل رقم الشحنة أو المورد</button>' + (!(x.n > 0) ? '<button class="act full" id="cx" style="color:#B3261E">إلغاء الشحنة (بدون حذف)</button>' : '') + '</div>'), function (el, close) {
+    if (x.st === 'ملغاة') return;
+    $('#ed', el).onclick = function () { close(); editShipSheet(x); };
+    if ($('#cx', el)) $('#cx', el).onclick = function () { close(); cancelShipSheet(x); };
     $('#ar', el).onclick = function () { close(); addArchiveSheet({kind: 'فاتورة مشتريات', ref: 'شحنة ' + x.id}); };
     $('#p', el).onclick = function () { close(); shipPiecesSheet(x); };
     $('#f', el).onclick = function () { close(); shipFeeSheet(x); };
     if (transit) $('#a', el).onclick = function () { close(); arriveSheet(x); };
+  });
+}
+function editShipSheet(x) {
+  sheet('<h2>تعديل الشحنة ' + esc(x.id) + '</h2><div class="f"><label>رقم الشحنة (حروف وأرقام، مثل 1026B)</label><input id="ni" value="' + esc(x.id) + '"></div><div class="f"><label>المورد</label><input id="su" value="' + esc(x.s) + '"></div><div class="stale">تتحدث الحركات والقطع المرتبطة بالرقم الجديد. أكواد القطع القديمة لا تتغير.</div><button class="act pri" style="width:100%;margin-top:12px" id="ok">حفظ</button>', function (el, close) {
+    $('#ok', el).onclick = function () {
+      var ni = $('#ni', el).value.trim(), su = $('#su', el).value.trim();
+      if (!/^[0-9A-Za-z\-]{1,12}$/.test(ni)) return toast('رقم الشحنة: حروف إنجليزية وأرقام فقط', true);
+      close(); api('editShip', {id: x.id, nid: ni, supplier: su}).then(function (r) { res3(r); });
+    };
+  });
+}
+function cancelShipSheet(x) {
+  sheet('<h2>إلغاء الشحنة ' + esc(x.id) + '</h2><div class="sum">لن تُحذف الشحنة. تبقى في السجل بحالة «ملغاة»، وتُسجَّل حركة عكسية تُعيد تكاليفها (' + fmt(x.tot) + ' ر.ع) إلى نقد المشروع.</div><button class="act pri" style="width:100%;background:#B3261E" id="ok">تأكيد الإلغاء</button>', function (el, close) {
+    $('#ok', el).onclick = function () { close(); api('cancelShip', {id: x.id}).then(function (r) { res3(r); }); };
   });
 }
 function shipPiecesSheet(x) {
@@ -889,7 +907,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=13').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=14').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
