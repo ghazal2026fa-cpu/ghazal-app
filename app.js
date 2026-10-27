@@ -612,7 +612,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 14</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 15</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -695,16 +695,27 @@ function newShipSheet() {
 function shipSheet(x) {
   var transit = x.st !== 'وصلت';
   sheet('<h2>شحنة ' + esc(x.id) + '</h2><div class="card"><div class="kv"><span>المورد</span><b>' + esc(x.s) + '</b></div><div class="kv"><span>الحالة</span><b>' + esc(x.st || '-') + '</b></div><div class="kv"><span>القطع</span><b>' + fmt0(x.n) + '</b></div>' +
-    '<div class="kv"><span>الشحن</span><b>' + fmt(x.ship) + '</b></div><div class="kv"><span>عمولة التحويل</span><b>' + fmt(x.conv) + '</b></div><div class="kv"><span>عمولة الفحص والوسيط</span><b>' + fmt(x.insp) + '</b></div><div class="kv"><span>إجمالي التكلفة</span><b>' + fmt(x.tot) + '</b></div></div>' +
+    '<div class="kv"><span>الشحن</span><b>' + fmt(x.ship) + '</b></div><div class="kv"><span>عمولة التحويل</span><b>' + fmt(x.conv) + '</b></div><div class="kv"><span>عمولة الفحص والوسيط</span><b>' + fmt(x.insp) + '</b></div><div class="kv"><span>إجمالي التكلفة</span><b>' + fmt(x.tot) + '</b></div><div class="kv"><span>قيمة البضاعة المدفوعة</span><b>' + fmt(x.paid || 0) + ' من ' + fmt(x.g || 0) + '</b></div></div>' +
     (x.st === 'ملغاة' ? '<div class="sum">هذه الشحنة ملغاة، وقد عُكست تكاليفها في الحركات.</div>' :
-    '<div class="acts"><button class="act pri" id="p">إضافة قطع</button><button class="act" id="f">تسجيل رسوم</button>' + (transit ? '<button class="act full" id="a">تسجيل وصول الشحنة</button>' : '') + '<button class="act full" id="ar">إرفاق إيصال أو فاتورة لهذه الشحنة</button><button class="act full" id="ed">تعديل رقم الشحنة أو المورد</button>' + (!(x.n > 0) ? '<button class="act full" id="cx" style="color:#B3261E">إلغاء الشحنة (بدون حذف)</button>' : '') + '</div>'), function (el, close) {
+    '<div class="acts"><button class="act pri" id="p">إضافة قطع</button><button class="act" id="f">تسجيل رسوم</button>' + (transit ? '<button class="act full" id="a">تسجيل وصول الشحنة</button>' : '') + '<button class="act full" id="ar">إرفاق إيصال أو فاتورة لهذه الشحنة</button>' + ((x.g || 0) - (x.paid || 0) > 0.0005 ? '<button class="act full" id="py">تسجيل دفع قيمة البضاعة (' + fmt((x.g || 0) - (x.paid || 0)) + ' ر.ع)</button>' : '') + '<button class="act full" id="ed">تعديل رقم الشحنة أو المورد</button>' + (!(x.n > 0) ? '<button class="act full" id="cx" style="color:#B3261E">إلغاء الشحنة (بدون حذف)</button>' : '') + '</div>'), function (el, close) {
     if (x.st === 'ملغاة') return;
     $('#ed', el).onclick = function () { close(); editShipSheet(x); };
+    if ($('#py', el)) $('#py', el).onclick = function () { close(); shipPaySheet(x); };
     if ($('#cx', el)) $('#cx', el).onclick = function () { close(); cancelShipSheet(x); };
     $('#ar', el).onclick = function () { close(); addArchiveSheet({kind: 'فاتورة مشتريات', ref: 'شحنة ' + x.id}); };
     $('#p', el).onclick = function () { close(); shipPiecesSheet(x); };
     $('#f', el).onclick = function () { close(); shipFeeSheet(x); };
     if (transit) $('#a', el).onclick = function () { close(); arriveSheet(x); };
+  });
+}
+function shipPaySheet(x) {
+  var left = Math.round(((x.g || 0) - (x.paid || 0)) * 1000) / 1000;
+  sheet('<h2>دفع بضاعة الشحنة ' + esc(x.id) + '</h2><div class="sum">المتبقي من قيمة البضاعة: ' + fmt(left) + ' ر.ع</div>' + numField('a', 'المبلغ المدفوع (ر.ع)') + '<div class="f"><label>مصدر الدفع</label><select id="sr"><option value="cash">من نقد المشروع (يُخصم من الصندوق)</option><option value="per">من مال شخصي (لا يمس الصندوق)</option></select></div><button class="act pri" style="width:100%" id="ok">تسجيل</button>', function (el, close) {
+    $('#a', el).value = left;
+    $('#ok', el).onclick = function () {
+      var a = Number($('#a', el).value); if (!(a > 0)) return toast('اكتب المبلغ', true);
+      close(); api('shipPay', {id: x.id, amount: a, personal: $('#sr', el).value === 'per'}).then(function (r) { res3(r); });
+    };
   });
 }
 function editShipSheet(x) {
@@ -724,7 +735,7 @@ function cancelShipSheet(x) {
 function shipPiecesSheet(x) {
   sheet('<h2>قطع للشحنة ' + esc(x.id) + '</h2><div class="f"><label>الوصف (الموديل - اللون - التفاصيل)</label><input id="ds"></div><div class="f"><label>العدد (1 إلى 60)</label><input id="q" type="number" inputmode="numeric"></div>' + '<div class="f"><label>سعر الشراء للقطعة</label><div style="display:flex;gap:8px"><input id="b" type="number" inputmode="decimal" step="0.001" style="flex:1"><select id="bc" style="width:110px"><option value="omr">ر.ع</option><option value="cny">يوان</option></select></div></div>' +
     '<div class="f" id="rw" style="display:none"><label>سعر الصرف: كم يوان لكل 1 ر.ع (حسب تحويلك للصراري)</label><input id="rt" type="number" inputmode="decimal" step="0.0001" value="' + (ls('gz_cny') || '') + '"><div class="stale" id="cv" style="margin-top:6px"></div></div>' + numField('s', 'سعر البيع المعتمد (ر.ع)') +
-    '<button class="act pri" style="width:100%" id="ok">إضافة</button><div class="stale" style="margin-top:12px">تُنشأ الأكواد تلقائياً، وبعدها صوّر كل قطعة من المخزون.</div>', function (el, close) {
+    '<label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" id="pd" checked> دفعتُ ثمن هذه القطع من نقد المشروع (يُخصم من الصندوق الآن)</label><button class="act pri" style="width:100%" id="ok">إضافة</button><div class="stale" style="margin-top:12px">تُنشأ الأكواد تلقائياً، وبعدها صوّر كل قطعة من المخزون.</div>', function (el, close) {
     function conv() {
       var cny = $('#bc', el).value === 'cny'; $('#rw', el).style.display = cny ? '' : 'none';
       var y = Number($('#b', el).value), r = Number($('#rt', el).value);
@@ -735,7 +746,10 @@ function shipPiecesSheet(x) {
       var ds = $('#ds', el).value.trim(), q = Math.floor(Number($('#q', el).value)), b = Number($('#b', el).value), sp = Number($('#s', el).value);
       if ($('#bc', el).value === 'cny') { var rt = Number($('#rt', el).value); if (!(rt > 0)) return toast('اكتب سعر الصرف', true); ls('gz_cny', String(rt)); b = Math.round(b / rt * 1000) / 1000; }
       if (!ds) return toast('اكتب الوصف', true); if (!(q >= 1 && q <= 60)) return toast('العدد من 1 إلى 60', true); if (!(b > 0) || !(sp > 0)) return toast('اكتب سعر الشراء وسعر البيع', true);
-      close(); api('shipPieces', {id: x.id, qty: q, buy: b, sale: sp, desc: ds}).then(function (r) { res3(r); });
+      var pay = $('#pd', el).checked; close(); api('shipPieces', {id: x.id, qty: q, buy: b, sale: sp, desc: ds}).then(function (r) {
+        if (r && r.ok && pay) return api('shipPay', {id: x.id, amount: Math.round(q * b * 1000) / 1000}).then(function (r2) { res3(r2 && r2.ok ? {ok: true, msg: (r.msg || 'تمت الإضافة') + ' + خُصم ثمن البضاعة من الصندوق'} : r2); });
+        res3(r);
+      });
     };
   });
 }
@@ -907,7 +921,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=14').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=15').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
