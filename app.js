@@ -196,6 +196,7 @@ function render() {
     '<button class="ic" id="rf" title="تحديث">↻</button><button class="ic" id="mn" title="القائمة">⋮</button></div>' +
     '<div class="page" id="body"></div>' +
     '<div class="nav"><button data-t="home"><span class="i">⌂</span>الرئيسية</button>' +
+    '<button data-t="goals"><span class="i">★</span>الأهداف</button>' +
     '<button class="plus" id="plus"><span>+</span></button>' +
     '<button data-t="inv"><span class="i">▦</span>المخزون</button></div>';
   $$('.nav [data-t]').forEach(function (b) { b.onclick = function () { S.tab = b.getAttribute('data-t'); S.select = false; S.sel = {}; renderBody(); window.scrollTo(0, 0); }; });
@@ -205,9 +206,9 @@ function render() {
 function renderBody() {
   if (!S.token || !$('#body')) return;
   $$('.nav [data-t]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === S.tab); });
-  $('#ttl').textContent = S.tab === 'home' ? ('أهلاً ' + (S.name || '')) : 'المخزون';
+  $('#ttl').textContent = S.tab === 'home' ? ('أهلاً ' + (S.name || '')) : S.tab === 'goals' ? 'الأهداف والخطة' : 'المخزون';
   var old = $('.bulk'); if (old) old.remove();
-  if (S.tab === 'home') viewHome(); else viewInv();
+  if (S.tab === 'home') viewHome(); else if (S.tab === 'goals') viewGoals(); else viewInv();
 }
 function openMenu() {
   sheet('<h2>' + esc(S.name || '') + '</h2><div class="menu">' +
@@ -236,7 +237,7 @@ function viewHome() {
   if (!d) { b.innerHTML = '<div class="sk" style="height:170px"></div><div class="sk"></div><div class="sk"></div>'; return; }
   var net = d.cash + d.recv + d.stock - d.liab, m = d.month, inv = d.inv;
   var upd = S.stamp ? new Date(S.stamp).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '';
-  b.innerHTML = goalsCard() +
+  b.innerHTML = homeGoals() +
     '<div class="hero"><div class="l">النقد الفعلي (نقد المشروع)</div><div class="v">' + fmt(d.cash) + '<small>ر.ع</small></div>' +
     '<div class="row"><div>الصافي التشغيلي<b>' + fmt(net) + '</b></div><div>مبيعات الشهر<b>' + fmt(m.sales) + '</b></div><div>صافي ربح الشهر<b>' + fmt(m.net) + '</b></div></div></div>' +
     '<div class="grid2"><div class="tile"><div class="l">المخزون بالتكلفة</div><div class="v">' + fmt(d.stock) + '</div><div class="s">' + fmt0(inv.total.n) + ' قطعة</div></div>' +
@@ -257,7 +258,55 @@ function viewHome() {
     '<div class="kv"><span>مسحوبات شخصية (خارج الربح)</span><b>' + fmt(m.draws) + '</b></div></div>' +
     '<div class="stale">آخر تحديث ' + upd + ' · الأرقام بالريال العماني</div>';
   $$('.bt[data-b]', b).forEach(function (r) { r.onclick = function () { boutiqueSheet(r.getAttribute('data-b')); }; });
-  $$('button[data-gd]', b).forEach(function (r) { r.onclick = function () { goalDoneSheet(S.goals.open[Number(r.getAttribute('data-gd'))]); }; });
+  bindGoals(b);
+}
+function openGoals() { var g = S.goals; return g ? (g.goals ? g.goals.filter(function (x) { return !x.done; }) : (g.open || [])) : []; }
+function bindGoals(b) {
+  var L = openGoals();
+  $$('button[data-gd]', b).forEach(function (r) { r.onclick = function (e) { e.stopPropagation(); goalDoneSheet(L[Number(r.getAttribute('data-gd'))]); }; });
+  $$('[data-go]', b).forEach(function (r) { r.onclick = function () { S.tab = 'goals'; renderBody(); window.scrollTo(0, 0); }; });
+}
+function homeGoals() {
+  var g = S.goals; if (!g) return '';
+  var al = goalAlerts(g), p = g.plan || {}, L = openGoals().slice(0, 3);
+  return '<div class="card" style="border:2px solid var(--wine)"><h3>★ أهدافي</h3>' +
+    (p.vision ? '<div class="sum" style="margin-bottom:8px"><b>' + esc(p.vision) + '</b></div>' : '') +
+    '<div class="stale" style="margin:-2px 0 8px">' + esc(g.stage) + '</div>' +
+    (al.length ? al.map(function (t) { return '<div class="sum" style="background:#FBE9EA;color:var(--bad);margin-bottom:8px">⚠ ' + esc(t) + '</div>'; }).join('') : '') +
+    '<div class="kv"><span>هدف الشهر</span><b>' + fmt0(g.month.done) + ' من ' + fmt0(g.month.target) + ' قطعة · ' + Math.round(g.month.pct * 100) + '%</b></div>' + pbar(g.month.pct) +
+    '<div class="stale" style="margin:-2px 0 6px">مضى ' + Math.round(g.elapsed * 100) + '% من الشهر</div>' +
+    '<div class="kv"><span>هدف الفترة</span><b>' + fmt0(g.period.done) + ' من ' + fmt0(g.period.target) + ' · ' + Math.round(g.period.pct * 100) + '%</b></div>' + pbar(g.period.pct, 'var(--gold)') +
+    (L.length ? '<div style="margin-top:8px;font-weight:700">أقرب الأهداف</div>' + L.map(function (x, i) { return goalRow(x, i); }).join('') : '<div class="empty">لا أهداف مفتوحة</div>') +
+    '<button class="chip" data-go="1" style="margin-top:10px">كل الأهداف والخطة ‹</button></div>';
+}
+function goalRow(x, i) {
+  var late = !x.done && x.d && x.d < new Date().toISOString().slice(0, 10);
+  var prog = (x.rule && x.rneed) ? ' · ' + fmt0(x.cur) + '/' + fmt0(x.rneed) : '';
+  return '<div class="bt"><div><div class="n">' + (x.done ? '✓ ' : '') + esc(x.g) + '</div><div class="m">' + (late ? '<span style="color:var(--bad)">متأخر · </span>' : '') + esc(x.d || 'بلا موعد') + ' · ' + esc(x.who || '') + prog + (x.auto ? ' · تلقائي' : '') + '</div></div>' +
+    '<div class="o">' + (x.done ? '' : x.rule ? '<div class="m">تلقائي</div>' : (i >= 0 ? '<button class="chip" data-gd="' + i + '">تم</button>' : '')) + '</div></div>';
+}
+function viewGoals() {
+  var g = S.goals, b = $('#body');
+  if (!g) { b.innerHTML = '<div class="sk" style="height:170px"></div><div class="sk"></div>'; return; }
+  var p = g.plan || {}, all = g.goals || [], open = all.filter(function (x) { return !x.done; }), done = all.filter(function (x) { return x.done; });
+  var gates = [1, 2, 3, 4].map(function (n) { return p['gate' + n] ? [n, p['gate' + n]] : null; }).filter(Boolean);
+  b.innerHTML = homeGoals().replace(/<button class="chip" data-go[^>]*>.*?<\/button>/, '') +
+    (p.mission || p.direction || p.frank ? '<div class="card"><h3>الرؤية والاتجاه</h3>' +
+      (p.mission ? '<div class="kv"><span>الرسالة</span><b>' + esc(p.mission) + '</b></div>' : '') +
+      (p.values ? '<div class="kv"><span>القيم</span><b>' + esc(p.values) + '</b></div>' : '') +
+      (p.direction ? '<div class="kv"><span>الاتجاه</span><b>' + esc(p.direction) + '</b></div>' : '') +
+      (p.frank ? '<div class="sum" style="margin-top:8px">' + esc(p.frank) + '</div>' : '') + '</div>' : '') +
+    (gates.length ? '<div class="card"><h3>' + esc(p.gate_title || 'بوابة 31 ديسمبر') + '</h3>' + gates.map(function (x) {
+      var t = x[1] + (x[0] === 1 ? ' — الآن: ' + fmt0(g.gate1 || 0) + ' من 7' : '');
+      return '<div class="kv"><span>' + (x[0] === 1 && (g.gate1 || 0) >= 7 ? '✓' : '○') + '</span><b>' + esc(t) + '</b></div>';
+    }).join('') + (p.gate_note ? '<div class="stale" style="margin-top:8px">' + esc(p.gate_note) + '</div>' : '') + '</div>' : '') +
+    '<div class="card"><h3>كل الأهداف المفتوحة (' + open.length + ')</h3>' + (open.length ? open.map(function (x, i) { return goalRow(x, i); }).join('') : '<div class="empty">لا أهداف مفتوحة</div>') + '</div>' +
+    (done.length ? '<div class="card"><h3>المنجزة (' + done.length + ')</h3>' + done.map(function (x) { return goalRow(x, -1); }).join('') + '</div>' : '') +
+    (g.months && g.months.length ? '<div class="card"><h3>مسار 2027 (الهدف / المحقق)</h3>' + g.months.map(function (m) {
+      return '<div class="kv"><span>' + esc(m.m) + '</span><b>' + fmt0(m.c) + ' / ' + fmt0(m.t) + '</b></div>';
+    }).join('') + '</div>' : '') +
+    '<div class="card"><h3>ملخص الشهر</h3>' + g.summary.map(function (t) { return '<div class="stale">' + esc(t) + '</div>'; }).join('') + '</div>';
+  bindGoals(b);
 }
 function pbar(p, c) { p = Math.max(0, Math.min(1, p || 0)); return '<div style="height:10px;background:#EADCDD;border-radius:6px;overflow:hidden;margin:6px 0"><div style="height:100%;width:' + Math.round(p * 100) + '%;background:' + (c || 'var(--wine)') + '"></div></div>'; }
 function goalAlerts(g) {
@@ -677,7 +726,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 18</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 19</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -986,7 +1035,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=18').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=19').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
