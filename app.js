@@ -237,10 +237,9 @@ function viewHome() {
   if (!d) { b.innerHTML = '<div class="sk" style="height:170px"></div><div class="sk"></div><div class="sk"></div>'; return; }
   var net = d.cash + d.recv + d.stock - d.liab, m = d.month, inv = d.inv;
   var upd = S.stamp ? new Date(S.stamp).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '';
-  b.innerHTML = homeGoals() +
-    '<div class="hero"><div class="l">النقد الفعلي (نقد المشروع)</div><div class="v">' + fmt(d.cash) + '<small>ر.ع</small></div>' +
+  b.innerHTML = '<div class="hero"><div class="l">النقد الفعلي (نقد المشروع)</div><div class="v">' + fmt(d.cash) + '<small>ر.ع</small></div>' +
     '<div class="row"><div>الصافي التشغيلي<b>' + fmt(net) + '</b></div><div>مبيعات الشهر<b>' + fmt(m.sales) + '</b></div><div>صافي ربح الشهر<b>' + fmt(m.net) + '</b></div></div></div>' +
-    '<div class="grid2"><div class="tile"><div class="l">المخزون بالتكلفة</div><div class="v">' + fmt(d.stock) + '</div><div class="s">' + fmt0(inv.total.n) + ' قطعة</div></div>' +
+    homeGoals() + '<div class="grid2"><div class="tile"><div class="l">المخزون بالتكلفة</div><div class="v">' + fmt(d.stock) + '</div><div class="s">' + fmt0(inv.total.n) + ' قطعة</div></div>' +
     '<div class="tile"><div class="l">مستحق على البوتيكات</div><div class="v">' + fmt(d.recv) + '</div><div class="s">لم يُحوَّل بعد</div></div>' +
     '<div class="tile"><div class="l">التزامات الموردين</div><div class="v">' + fmt(d.liab) + '</div><div class="s">علينا للموردين</div></div>' +
     '<div class="tile"><div class="l">قطع مباعة هذا الشهر</div><div class="v">' + fmt0(m.qty) + '</div><div class="s">من ' + esc(m.from) + '</div></div></div>' +
@@ -266,7 +265,7 @@ function bindGoals(b) {
   $$('button[data-gd]', b).forEach(function (r) { r.onclick = function (e) { e.stopPropagation(); goalDoneSheet(L[Number(r.getAttribute('data-gd'))]); }; });
   $$('[data-go]', b).forEach(function (r) { r.onclick = function () { S.tab = 'goals'; renderBody(); window.scrollTo(0, 0); }; });
 }
-function homeGoals() {
+function goalsTop() {
   var g = S.goals; if (!g) return '';
   var al = goalAlerts(g), p = g.plan || {}, L = openGoals().slice(0, 3);
   return '<div class="card" style="border:2px solid var(--wine)"><h3>★ أهدافي</h3>' +
@@ -279,6 +278,21 @@ function homeGoals() {
     (L.length ? '<div style="margin-top:8px;font-weight:700">أقرب الأهداف</div>' + L.map(function (x, i) { return goalRow(x, i); }).join('') : '<div class="empty">لا أهداف مفتوحة</div>') +
     '<button class="chip" data-go="1" style="margin-top:10px">كل الأهداف والخطة ‹</button></div>';
 }
+function homeGoals() {
+  var g = S.goals; if (!g) return '';
+  var p = g.plan || {}, mo = g.months || [], T = 0, C = 0;
+  mo.forEach(function (m) { T += m.t || 0; C += m.c || 0; });
+  var all = g.goals || [], dn = all.filter(function (x) { return x.done; }).length;
+  var gate = p.gate_title ? (p.gate_title + ': ' + fmt0(g.gate1 || 0) + ' من 7 قطع في بوتيك ثانٍ') : '';
+  return '<div class="card" data-go="1" style="border:2px solid var(--wine);cursor:pointer"><h3>★ رؤيتنا وأهداف السنة</h3>' +
+    (p.vision ? '<div class="sum" style="margin-bottom:10px"><b>' + esc(p.vision) + '</b>' + (g.msg ? '<br><span style="font-size:13px">' + esc(g.msg) + '</span>' : '') + '</div>' : (g.msg ? '<div class="sum" style="margin-bottom:10px">' + esc(g.msg) + '</div>' : '')) +
+    (T ? '<div class="kv"><span>هدف 2027</span><b>' + fmt0(C) + ' من ' + fmt0(T) + ' قطعة</b></div>' + pbar(C / T) : '') +
+    '<div class="kv"><span>هدف الشهر</span><b>' + fmt0(g.month.done) + ' من ' + fmt0(g.month.target) + ' قطعة</b></div>' + pbar(g.month.pct) +
+    '<div class="kv"><span>هدف التجربة</span><b>' + fmt0(g.period.done) + ' من ' + fmt0(g.period.target) + ' قطعة</b></div>' + pbar(g.period.pct, 'var(--gold)') +
+    (gate ? '<div class="kv"><span>البوابة</span><b>' + esc(gate) + '</b></div>' : '') +
+    (all.length ? '<div class="kv"><span>أهداف منجزة</span><b>' + dn + ' من ' + all.length + '</b></div>' : '') +
+    '<div class="stale" style="margin-top:8px">للعرض فقط · اضغط لفتح صفحة الأهداف ‹</div></div>';
+}
 function goalRow(x, i) {
   var late = !x.done && x.d && x.d < new Date().toISOString().slice(0, 10);
   var prog = (x.rule && x.rneed) ? ' · ' + fmt0(x.cur) + '/' + fmt0(x.rneed) : '';
@@ -290,7 +304,7 @@ function viewGoals() {
   if (!g) { b.innerHTML = '<div class="sk" style="height:170px"></div><div class="sk"></div>'; return; }
   var p = g.plan || {}, all = g.goals || [], open = all.filter(function (x) { return !x.done; }), done = all.filter(function (x) { return x.done; });
   var gates = [1, 2, 3, 4].map(function (n) { return p['gate' + n] ? [n, p['gate' + n]] : null; }).filter(Boolean);
-  b.innerHTML = homeGoals().replace(/<button class="chip" data-go[^>]*>.*?<\/button>/, '') +
+  b.innerHTML = goalsTop().replace(/<button class="chip" data-go[^>]*>.*?<\/button>/, '') +
     (p.mission || p.direction || p.frank ? '<div class="card"><h3>الرؤية والاتجاه</h3>' +
       (p.mission ? '<div class="kv"><span>الرسالة</span><b>' + esc(p.mission) + '</b></div>' : '') +
       (p.values ? '<div class="kv"><span>القيم</span><b>' + esc(p.values) + '</b></div>' : '') +
@@ -726,7 +740,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 19</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 20</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -1035,7 +1049,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=19').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=20').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
