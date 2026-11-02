@@ -263,7 +263,6 @@ function pbar(p, c) { p = Math.max(0, Math.min(1, p || 0)); return '<div style="
 function goalAlerts(g) {
   var out = [];
   if (g.supplier > 0 && g.cash < g.supplier) out.push('النقد (' + fmt(g.cash) + ') أقل من دين المورد (' + fmt(g.supplier) + '). لا تُدفع أقساط الشقة من نقد المشروع الآن.');
-  if (g.month.target > 0 && g.stock / g.month.target > 8) out.push('تغطية المخزون أكثر من 8 أشهر بوتيرة هدف الشهر. لا شراء جديد.');
   if (S.inv && S.inv.items) {
     var n = S.inv.items.filter(function (i) { return i.st === 'مباع' && i.sp > 0 && i.ap > 0 && String(i.ch || '').indexOf('هدية') !== 0 && (i.sp - i.ap) / i.sp > 0.1001; }).length;
     if (n) out.push(n + ' قطعة مباعة بخصم أكبر من 10% (يحتاج موافقة).');
@@ -678,7 +677,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 17</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 18</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -987,7 +986,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=17').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=18').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
