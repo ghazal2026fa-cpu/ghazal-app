@@ -13,7 +13,7 @@ var S = {
   token: ls('gz_token'), user: ls('gz_user'), name: ls('gz_name'), tab: 'home',
   dash: null, inv: null, meta: null, stamp: 0, filter: 'all', q: '', select: false, sel: {}, photos: {}
 };
-try { S.dash = JSON.parse(ls('gz_dash') || 'null'); S.inv = JSON.parse(ls('gz_inv') || 'null'); S.meta = JSON.parse(ls('gz_meta') || 'null'); S.stamp = Number(ls('gz_stamp') || 0); } catch (e) {}
+try { S.dash = JSON.parse(ls('gz_dash') || 'null'); S.inv = JSON.parse(ls('gz_inv') || 'null'); S.meta = JSON.parse(ls('gz_meta') || 'null'); S.goals = JSON.parse(ls('gz_goals') || 'null'); S.stamp = Number(ls('gz_stamp') || 0); } catch (e) {}
 
 /* ---------- ui helpers ---------- */
 var tt;
@@ -173,7 +173,8 @@ function viewLogin() {
 /* ---------- data ---------- */
 function loadAll(silent) {
   if (!S.token) return Promise.resolve();
-  return Promise.all([api('dash', null, {silent: true}), api('inv', null, {silent: true}), api('meta', null, {silent: true})]).then(function (a) {
+  return Promise.all([api('dash', null, {silent: true}), api('inv', null, {silent: true}), api('meta', null, {silent: true}), api('goals', null, {silent: true})]).then(function (a) {
+    if (a[3] && a[3].ok) { S.goals = a[3]; ls('gz_goals', JSON.stringify(a[3])); }
     if (a[0] && a[0].ok) { S.dash = a[0]; ls('gz_dash', JSON.stringify(a[0])); }
     if (a[1] && a[1].ok) { S.inv = a[1]; ls('gz_inv', JSON.stringify(a[1])); }
     if (a[2] && a[2].ok) { S.meta = a[2]; ls('gz_meta', JSON.stringify(a[2])); }
@@ -235,7 +236,7 @@ function viewHome() {
   if (!d) { b.innerHTML = '<div class="sk" style="height:170px"></div><div class="sk"></div><div class="sk"></div>'; return; }
   var net = d.cash + d.recv + d.stock - d.liab, m = d.month, inv = d.inv;
   var upd = S.stamp ? new Date(S.stamp).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '';
-  b.innerHTML =
+  b.innerHTML = goalsCard() +
     '<div class="hero"><div class="l">النقد الفعلي (نقد المشروع)</div><div class="v">' + fmt(d.cash) + '<small>ر.ع</small></div>' +
     '<div class="row"><div>الصافي التشغيلي<b>' + fmt(net) + '</b></div><div>مبيعات الشهر<b>' + fmt(m.sales) + '</b></div><div>صافي ربح الشهر<b>' + fmt(m.net) + '</b></div></div></div>' +
     '<div class="grid2"><div class="tile"><div class="l">المخزون بالتكلفة</div><div class="v">' + fmt(d.stock) + '</div><div class="s">' + fmt0(inv.total.n) + ' قطعة</div></div>' +
@@ -256,6 +257,40 @@ function viewHome() {
     '<div class="kv"><span>مسحوبات شخصية (خارج الربح)</span><b>' + fmt(m.draws) + '</b></div></div>' +
     '<div class="stale">آخر تحديث ' + upd + ' · الأرقام بالريال العماني</div>';
   $$('.bt[data-b]', b).forEach(function (r) { r.onclick = function () { boutiqueSheet(r.getAttribute('data-b')); }; });
+  $$('button[data-gd]', b).forEach(function (r) { r.onclick = function () { goalDoneSheet(S.goals.open[Number(r.getAttribute('data-gd'))]); }; });
+}
+function pbar(p, c) { p = Math.max(0, Math.min(1, p || 0)); return '<div style="height:10px;background:#EADCDD;border-radius:6px;overflow:hidden;margin:6px 0"><div style="height:100%;width:' + Math.round(p * 100) + '%;background:' + (c || 'var(--wine)') + '"></div></div>'; }
+function goalAlerts(g) {
+  var out = [];
+  if (g.supplier > 0 && g.cash < g.supplier) out.push('النقد (' + fmt(g.cash) + ') أقل من دين المورد (' + fmt(g.supplier) + '). لا تُدفع أقساط الشقة من نقد المشروع الآن.');
+  if (g.month.target > 0 && g.stock / g.month.target > 8) out.push('تغطية المخزون أكثر من 8 أشهر بوتيرة هدف الشهر. لا شراء جديد.');
+  if (S.inv && S.inv.items) {
+    var n = S.inv.items.filter(function (i) { return i.st === 'مباع' && i.sp > 0 && i.ap > 0 && String(i.ch || '').indexOf('هدية') !== 0 && (i.sp - i.ap) / i.sp > 0.1001; }).length;
+    if (n) out.push(n + ' قطعة مباعة بخصم أكبر من 10% (يحتاج موافقة).');
+  }
+  return out;
+}
+function goalsCard() {
+  var g = S.goals; if (!g) return '';
+  var al = goalAlerts(g);
+  return '<div class="card"><h3>لوحة الأهداف</h3><div class="stale" style="margin:-6px 0 8px">' + esc(g.stage) + '</div>' +
+    (al.length ? al.map(function (t) { return '<div class="sum" style="background:#FBE9EA;color:var(--bad);margin-bottom:8px">⚠ ' + esc(t) + '</div>'; }).join('') : '') +
+    '<div class="kv"><span>هدف الشهر</span><b>' + fmt0(g.month.done) + ' من ' + fmt0(g.month.target) + ' قطعة · ' + Math.round(g.month.pct * 100) + '%</b></div>' + pbar(g.month.pct) +
+    '<div class="stale" style="margin:-2px 0 6px">مضى ' + Math.round(g.elapsed * 100) + '% من الشهر</div>' +
+    '<div class="kv"><span>هدف الفترة</span><b>' + fmt0(g.period.done) + ' من ' + fmt0(g.period.target) + ' · ' + Math.round(g.period.pct * 100) + '%</b></div>' + pbar(g.period.pct, 'var(--gold)') +
+    '<div class="kv"><span>مبيعات الشهر</span><b>' + fmt(g.sales) + '</b></div><div class="kv"><span>صافي ربح الشهر</span><b class="' + (g.net >= 0 ? 'pos' : 'neg') + '">' + fmt(g.net) + '</b></div>' +
+    '<div class="kv"><span>النقد / دين المورد</span><b>' + fmt(g.cash) + ' / ' + fmt(g.supplier) + '</b></div><div class="kv"><span>قطع المخزون</span><b>' + fmt0(g.stock) + '</b></div>' +
+    '<div class="sum" style="margin-top:10px"><b>الخطوة التالية:</b> ' + esc(g.next) + (g.nextDate ? '<br>موعدها ' + esc(g.nextDate) : '') + '<br>مطابقة النقد القادمة (السبت): ' + esc(g.sat) + '</div>' +
+    '<div class="stale" style="margin-top:8px">' + esc(g.msg) + '</div>' +
+    '<h3 style="margin-top:14px">الأهداف المفتوحة</h3>' + (g.open.length ? g.open.map(function (x, i) {
+      return '<div class="bt"><div><div class="n">' + esc(x.g) + '</div><div class="m">' + esc(x.d || 'بلا موعد') + ' · ' + esc(x.who) + (x.need ? ' · ' + esc(x.need) : '') + '</div></div><div class="o"><button class="chip" data-gd="' + i + '">تم</button></div></div>';
+    }).join('') : '<div class="empty">لا أهداف مفتوحة</div>') +
+    '<details style="margin-top:10px"><summary>ملخص الشهر</summary>' + g.summary.map(function (t) { return '<div class="stale">' + esc(t) + '</div>'; }).join('') + '</details></div>';
+}
+function goalDoneSheet(x) {
+  sheet('<h2>تعليم الهدف منجزاً؟</h2><div class="sum">' + esc(x.g) + '</div><button class="act pri" style="width:100%" id="ok">نعم، تم</button>', function (el, close) {
+    $('#ok', el).onclick = function () { close(); api('goalDone', {goal: x.g}).then(function (r) { res3(r); }); };
+  });
 }
 
 /* ---------- inventory ---------- */
@@ -643,7 +678,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 16</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 17</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -952,7 +987,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=16').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=17').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
