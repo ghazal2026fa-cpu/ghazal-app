@@ -278,13 +278,26 @@ function goalsTop() {
     (L.length ? '<div style="margin-top:8px;font-weight:700">أقرب الأهداف</div>' + L.map(function (x, i) { return goalRow(x, i); }).join('') : '<div class="empty">لا أهداف مفتوحة</div>') +
     '<button class="chip" data-go="1" style="margin-top:10px">كل الأهداف والخطة ‹</button></div>';
 }
+function dueAlerts() {
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var out = [];
+  openGoals().forEach(function (x) {
+    if (!x.d) return;
+    var dd = new Date(x.d + 'T00:00:00'), days = Math.round((dd - today) / 86400000);
+    if (days < 0) out.push({late: true, t: 'متأخر ' + (-days) + ' يوم: ' + x.g});
+    else if (days <= 3) out.push({late: false, t: (days === 0 ? 'اليوم: ' : 'بعد ' + days + ' يوم: ') + x.g});
+  });
+  return out;
+}
 function homeGoals() {
   var g = S.goals; if (!g) return '';
+  var da = dueAlerts();
   var p = g.plan || {}, mo = g.months || [], T = 0, C = 0;
   mo.forEach(function (m) { T += m.t || 0; C += m.c || 0; });
   var all = g.goals || [], dn = all.filter(function (x) { return x.done; }).length;
   var gate = p.gate_title ? (p.gate_title + ': ' + fmt0(g.gate1 || 0) + ' من 7 قطع في بوتيك ثانٍ') : '';
   return '<div class="card" data-go="1" style="border:2px solid var(--wine);cursor:pointer"><h3>★ رؤيتنا وأهداف السنة</h3>' +
+    da.map(function (a) { return '<div class="sum" style="margin-bottom:6px;background:' + (a.late ? '#FBE9EA' : '#FFF4DC') + ';color:' + (a.late ? 'var(--bad)' : '#7A5A00') + '">⏰ ' + esc(a.t) + '</div>'; }).join('') +
     (p.vision ? '<div class="sum" style="margin-bottom:10px"><b>' + esc(p.vision) + '</b>' + (g.msg ? '<br><span style="font-size:13px">' + esc(g.msg) + '</span>' : '') + '</div>' : (g.msg ? '<div class="sum" style="margin-bottom:10px">' + esc(g.msg) + '</div>' : '')) +
     (T ? '<div class="kv"><span>هدف 2027</span><b>' + fmt0(C) + ' من ' + fmt0(T) + ' قطعة</b></div>' + pbar(C / T) : '') +
     '<div class="kv"><span>هدف الشهر</span><b>' + fmt0(g.month.done) + ' من ' + fmt0(g.month.target) + ' قطعة</b></div>' + pbar(g.month.pct) +
@@ -740,7 +753,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 20</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 21</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -1049,7 +1062,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=20').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=21').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
