@@ -394,27 +394,45 @@ function fillItems() {
     return (i.c + ' ' + i.d + ' ' + i.s + ' ' + (i.loc || '')).toLowerCase().indexOf(q) >= 0;
   }).sort(function (a, b) { return order[stKey(a)] - order[stKey(b)]; });
   if (!list.length) { box.innerHTML = '<div class="empty" style="grid-column:1/-1">لا توجد قطع مطابقة</div>'; updateBulk(); return; }
-  box.innerHTML = list.map(function (i) {
-    var k = stKey(i), price = k === 'sold' ? i.ap : i.sp, on = S.sel[i.c] ? ' sel' : '';
-    return '<button class="it' + on + '" data-c="' + esc(i.c) + '"><div class="ph" data-ph="' + (i.ph ? i.ph + '@360' : '') + '" data-id="' + esc(i.ph) + '">' +
+  var groups = [], gm = {};
+  list.forEach(function (i) {
+    var key = [i.d, i.st, i.loc || '', i.sp, i.ap || '', i.sd || '', i.ch || ''].join('|');
+    if (!gm[key]) { gm[key] = {k: key, items: []}; groups.push(gm[key]); }
+    gm[key].items.push(i);
+  });
+  S.groups = {}; groups.forEach(function (g, n) { g.id = 'g' + n; S.groups[g.id] = g; });
+  box.innerHTML = groups.map(function (g) {
+    var i = g.items[0], n = g.items.length, k = stKey(i), price = k === 'sold' ? i.ap : i.sp;
+    var sel = g.items.filter(function (x) { return S.sel[x.c]; }).length;
+    return '<button class="it' + (sel ? ' sel' : '') + '" data-g="' + g.id + '"><div class="ph" data-ph="' + (i.ph ? i.ph + '@360' : '') + '" data-id="' + esc(i.ph) + '">' +
       (i.ph ? '' : '<div class="no"><b>✦</b>بدون صورة</div>') + '</div>' +
       '<span class="badge b-' + k + '">' + (k === 'bt' && i.loc ? esc(i.loc) : STATUS[i.st] ? STATUS[i.st][1] : esc(i.st)) + '</span>' +
-      (S.select && k !== 'sold' && k !== 'tr' ? '<span class="ck">' + (S.sel[i.c] ? '✓' : '') + '</span>' : '') +
-      '<div class="bd"><div class="cd">' + esc(i.c) + '</div><div class="ds">' + esc(i.d) + '</div><div class="pr">' + fmt(price) + ' ر.ع</div></div></button>';
+      (n > 1 ? '<span class="badge" style="top:56px;inset-inline-start:auto;inset-inline-end:8px;background:var(--wine);color:#fff">× ' + n + '</span>' : '') +
+      (S.select && k !== 'sold' && k !== 'tr' ? '<span class="ck">' + (sel ? (n > 1 ? sel + '/' + n : '✓') : '') + '</span>' : '') +
+      '<div class="bd"><div class="cd">' + esc(n > 1 ? i.c + ' وما بعده' : i.c) + '</div><div class="ds">' + esc(i.d) + '</div><div class="pr">' + fmt(price) + ' ر.ع</div></div></button>';
   }).join('');
   $$('.it', box).forEach(function (el) {
-    var c = el.getAttribute('data-c');
+    var g = S.groups[el.getAttribute('data-g')], n = g.items.length;
     el.onclick = function () {
+      var k = stKey(g.items[0]);
       if (S.select) {
-        var it = byCode(c); if (!it || stKey(it) === 'sold' || stKey(it) === 'tr') return;
-        if (S.sel[c]) delete S.sel[c]; else S.sel[c] = 1;
-        el.classList.toggle('sel', !!S.sel[c]); var ck = $('.ck', el); if (ck) ck.textContent = S.sel[c] ? '✓' : ''; updateBulk();
-      } else openItem(c);
+        if (k === 'sold' || k === 'tr') return;
+        var cur = g.items.filter(function (x) { return S.sel[x.c]; }).length, nx = cur >= n ? 0 : cur + 1;
+        g.items.forEach(function (x, j) { if (j < nx) S.sel[x.c] = 1; else delete S.sel[x.c]; });
+        el.classList.toggle('sel', nx > 0); var ck = $('.ck', el); if (ck) ck.textContent = nx ? (n > 1 ? nx + '/' + n : '✓') : ''; updateBulk();
+      } else if (n === 1) openItem(g.items[0].c);
+      else groupSheet(g);
     };
     var ph = $('.ph', el), id = ph.getAttribute('data-id');
     if (id) { if (S.photos[id + '@360']) paint(id + '@360'); else if (io) io.observe(ph); else wantPhoto(id, 360); }
   });
   updateBulk();
+}
+function groupSheet(g) {
+  sheet('<h2>' + esc(g.items[0].d) + '</h2><div class="stale" style="margin:-6px 0 10px">' + g.items.length + ' قطعة · اضغط قطعة لفتحها</div>' +
+    g.items.map(function (x) { return '<div class="bt" data-c="' + esc(x.c) + '"><div><div class="n">' + esc(x.c) + ' ‹</div></div><div class="o">' + fmt(stKey(x) === 'sold' ? x.ap : x.sp) + '</div></div>'; }).join(''), function (el, close) {
+    $$('.bt[data-c]', el).forEach(function (r) { r.onclick = function () { close(); openItem(r.getAttribute('data-c')); }; });
+  });
 }
 function byCode(c) { return (S.inv ? S.inv.items : []).filter(function (i) { return i.c === c; })[0]; }
 function updateBulk() {
@@ -753,7 +771,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 21</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 22</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -1062,7 +1080,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=21').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=22').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
