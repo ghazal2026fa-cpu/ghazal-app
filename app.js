@@ -217,12 +217,14 @@ function openMenu() {
     '<button id="m6"><span class="i">❏</span><div>الأرشيف والإيصالات<small>تحويلات، فواتير مشتريات، فواتير البوتيك، مرجع وحفظ</small></div></button>' +
     '<button id="m8"><span class="i">⇄</span><div>ديون الأشخاص<small>ما اقترضته للمشروع، وسداده، وكم عليك لكل شخص</small></div></button>' +
     '<button id="m7"><span class="i">☎</span><div>عملاء البيع الآجل<small>من لم يسدد بعد، وتسجيل دفعاتهم</small></div></button>' +
+    '<button id="m9"><span class="i">✓</span><div>الجرد<small>عدّ المخزن والبوتيك ومقارنته بالنظام</small></div></button>' +
     '<button id="m4"><span class="i">⚙</span><div>الإعدادات<small>بوتيك جديد، الرقم السري، ذاكرة الصور</small></div></button>' +
     '<button id="m1"><span class="i">↻</span><div>تحديث البيانات<small>سحب آخر الأرقام من الشيت</small></div></button>' +
     '<button id="m2"><span class="i">⎋</span><div>تسجيل الخروج<small>على هذا الجهاز</small></div></button></div>', function (el, close) {
     $('#m1', el).onclick = function () { close(); refreshBtn(); };
     $('#m2', el).onclick = function () { close(); logout(); };
     $('#m3', el).onclick = function () { close(); logSheet(); };
+    $('#m9', el).onclick = function () { close(); countSheet(); };
     $('#m4', el).onclick = function () { close(); settingsSheet(); };
     $('#m5', el).onclick = function () { close(); shipsSheet(); };
     $('#m6', el).onclick = function () { close(); archiveSheet(); };
@@ -917,13 +919,53 @@ function editSheet(it) {
   });
 }
 
+
+/* ---------- stocktake ---------- */
+function countSheet() {
+  var ms = (S.inv.models || []).map(function (x) { return x.m; }), cur = 'main', draft = {};
+  try { draft = JSON.parse(localStorage.getItem('gz_count') || '{}'); } catch (e) {}
+  function sysOf(m, w) {
+    var s = modelStats(m), n = 0, cs = [];
+    s.locs.forEach(function (l) { if ((w === 'main') === (l === MAIN)) { n += s.loc[l]; (s.cols[l] || []).forEach(function (x) { cs.push(x); }); } });
+    return {n: n, c: colTxt(cs)};
+  }
+  function save() { try { localStorage.setItem('gz_count', JSON.stringify(draft)); } catch (e) {} }
+  sheet('<h2>الجرد</h2><div class="chips" id="cw"><button class="chip on" data-w="main">المخزن</button><button class="chip" data-w="bt">البوتيك</button></div>' +
+    '<div class="stale" id="csum" style="margin:10px 0"></div><div id="clist"></div>' +
+    '<button class="act" style="width:100%;margin-top:10px" id="crs">تصفير الجرد</button>', function (el) {
+    function draw() {
+      var rows = '', sysT = 0, actT = 0, diff = 0, done = 0;
+      ms.forEach(function (m) {
+        var y = sysOf(m, cur); if (!y.n && draft[cur + m] == null) return;
+        var k = cur + m, a = draft[k], has = a != null; if (!has) a = y.n;
+        sysT += y.n; actT += a; if (has) done++; if (has && a !== y.n) diff++;
+        rows += '<div class="bt" style="align-items:center' + (has && a !== y.n ? ';background:#FBEAEA' : '') + '"><div class="n"><b>' + esc(m) + '</b> ' + esc(modelInfo(m).n || '') + '<small style="display:block;color:var(--mute)">النظام ' + y.n + (y.c ? ' · ' + y.c : '') + '</small></div>' +
+          '<div class="o" style="display:flex;gap:6px;align-items:center"><button class="chip" data-m="' + esc(m) + '" data-d="-1">−</button><b style="min-width:26px;text-align:center;' + (has ? '' : 'opacity:.4') + '">' + a + '</b><button class="chip" data-m="' + esc(m) + '" data-d="1">＋</button><button class="chip" data-m="' + esc(m) + '" data-d="ok">✓</button></div></div>';
+      });
+      $('#clist', el).innerHTML = rows;
+      $('#csum', el).innerHTML = 'النظام ' + sysT + ' · الفعلي ' + actT + ' · الفرق ' + (actT - sysT) + ' · عُدّ ' + done + ' · فروقات ' + diff;
+      $$('#clist [data-m]', el).forEach(function (b) {
+        b.onclick = function () {
+          var m = b.getAttribute('data-m'), d = b.getAttribute('data-d'), y = sysOf(m, cur).n, k = cur + m, a = draft[k] != null ? draft[k] : y;
+          draft[k] = d === 'ok' ? y : Math.max(0, a + Number(d)); save(); draw();
+        };
+      });
+    }
+    $$('#cw .chip', el).forEach(function (b) {
+      b.onclick = function () { cur = b.getAttribute('data-w'); $$('#cw .chip', el).forEach(function (x) { x.classList.toggle('on', x === b); }); draw(); };
+    });
+    $('#crs', el).onclick = function () { if (confirm('تصفير كل أرقام الجرد؟')) { draft = {}; save(); draw(); } };
+    draw();
+  });
+}
+
 /* ---------- settings / log ---------- */
 function settingsSheet() {
   sheet('<h2>الإعدادات</h2><div class="menu">' +
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 24</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 25</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -1232,7 +1274,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=24').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=25').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
