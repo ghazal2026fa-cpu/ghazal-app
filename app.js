@@ -391,9 +391,12 @@ function fillItems() {
   var list = S.inv.items.filter(function (i) {
     if (S.filter !== 'all' && stKey(i) !== S.filter) return false;
     if (!q) return true;
-    return (i.c + ' ' + i.d + ' ' + i.s + ' ' + (i.loc || '')).toLowerCase().indexOf(q) >= 0;
+    var mi = i.m ? modelInfo(i.m) : {}, cs = i.m ? ((S.inv.colors || []).filter(function (c) { return c.m === i.m; }).map(function (c) { return c.c; }).join(' ')) : '';
+    return (i.c + ' ' + i.d + ' ' + i.s + ' ' + (i.loc || '') + ' ' + (i.m || '') + ' ' + (mi.n || '') + ' ' + (mi.t || '') + ' ' + cs).toLowerCase().indexOf(q) >= 0;
   }).sort(function (a, b) { return order[stKey(a)] - order[stKey(b)]; });
   if (!list.length) { box.innerHTML = '<div class="empty" style="grid-column:1/-1">لا توجد قطع مطابقة</div>'; updateBulk(); return; }
+  var useM = !S.select && S.inv.models && S.inv.models.length, mHtml = useM ? modelCards(list) : '';
+  if (useM) list = list.filter(function (i) { return !i.m; });
   var groups = [], gm = {};
   list.forEach(function (i) {
     var key = [i.d, i.st, i.loc || '', i.sp, i.ap || '', i.sd || '', i.ch || ''].join('|');
@@ -401,7 +404,7 @@ function fillItems() {
     gm[key].items.push(i);
   });
   S.groups = {}; groups.forEach(function (g, n) { g.id = 'g' + n; S.groups[g.id] = g; });
-  box.innerHTML = groups.map(function (g) {
+  box.innerHTML = mHtml + groups.map(function (g) {
     var i = g.items[0], n = g.items.length, k = stKey(i), price = k === 'sold' ? i.ap : i.sp;
     var sel = g.items.filter(function (x) { return S.sel[x.c]; }).length;
     return '<button class="it' + (sel ? ' sel' : '') + '" data-g="' + g.id + '"><div class="ph" data-ph="' + (i.ph ? i.ph + '@360' : '') + '" data-id="' + esc(i.ph) + '">' +
@@ -411,7 +414,12 @@ function fillItems() {
       (S.select && k !== 'sold' && k !== 'tr' ? '<span class="ck">' + (sel ? (n > 1 ? sel + '/' + n : '✓') : '') + '</span>' : '') +
       '<div class="bd"><div class="cd">' + esc(n > 1 ? i.c + ' وما بعده' : i.c) + '</div><div class="ds">' + esc(i.d) + '</div><div class="pr">' + fmt(price) + ' ر.ع</div></div></button>';
   }).join('');
-  $$('.it', box).forEach(function (el) {
+  $$('.it[data-m]', box).forEach(function (el) {
+    el.onclick = function () { modelSheet(el.getAttribute('data-m')); };
+    var ph = $('.ph', el), id = ph.getAttribute('data-id');
+    if (id) { if (S.photos[id + '@360']) paint(id + '@360'); else if (io) io.observe(ph); else wantPhoto(id, 360); }
+  });
+  $$('.it[data-g]', box).forEach(function (el) {
     var g = S.groups[el.getAttribute('data-g')], n = g.items.length;
     el.onclick = function () {
       var k = stKey(g.items[0]);
@@ -449,6 +457,137 @@ function updateBulk() {
   $('#bb').onclick = function () { confirmBack(Object.keys(S.sel)); };
   $('#bi').onclick = function () { var l = Object.keys(S.sel).map(byCode).filter(function (i) { return i && i.st === 'مباع'; }); if (!l.length) return toast('حدّد قطعاً مباعة لإصدار فاتورة', true); invoiceSheet(l); };
   $('#bx').onclick = function () { S.sel = {}; fillItems(); };
+}
+
+/* ---------- models ---------- */
+var MAIN = 'المخزن الرئيسي';
+function modelInfo(m) { return ((S.inv && S.inv.models) || []).filter(function (x) { return x.m === m; })[0] || {m: m, n: '', t: ''}; }
+function modelStats(m) {
+  var items = S.inv.items.filter(function (i) { return i.m === m; }), loc = {}, sold = 0, tr = 0, first = null;
+  items.forEach(function (i) {
+    if (!first || (!first.ph && i.ph)) first = i;
+    var k = stKey(i);
+    if (k === 'sold') sold++; else if (k === 'tr') tr++;
+    else { var l = k === 'main' ? MAIN : (i.loc || '؟'); loc[l] = (loc[l] || 0) + 1; }
+  });
+  var cols = {}; ((S.inv.colors) || []).forEach(function (c) { if (c.m === m) { (cols[c.l] = cols[c.l] || []).push({c: c.c, n: c.n}); } });
+  var bad = Object.keys(loc).filter(function (l) { var s = (cols[l] || []).reduce(function (a, x) { return a + x.n; }, 0); return s !== loc[l]; });
+  var locs = Object.keys(loc).sort(function (a, b) { return a === MAIN ? -1 : b === MAIN ? 1 : 0; });
+  return {m: m, items: items, loc: loc, locs: locs, sold: sold, tr: tr, first: first, cols: cols, bad: bad, total: items.length};
+}
+function colTxt(arr) { return (arr || []).map(function (x) { return esc(x.c) + ' ' + x.n; }).join(' · '); }
+function modelCards(list) {
+  var seen = {}, ms = [];
+  list.forEach(function (i) { if (i.m && !seen[i.m]) { seen[i.m] = 1; ms.push(i.m); } });
+  return ms.map(function (m) {
+    var s = modelStats(m), inf = modelInfo(m), f = s.first || {};
+    var parts = s.locs.map(function (l) { return (l === MAIN ? 'مخزن' : esc(l)) + ' ' + s.loc[l]; });
+    if (s.tr) parts.push('في الطريق ' + s.tr); if (s.sold) parts.push('مباع ' + s.sold);
+    return '<button class="it" data-m="' + esc(m) + '"><div class="ph" data-ph="' + (f.ph ? f.ph + '@360' : '') + '" data-id="' + esc(f.ph || '') + '">' + (f.ph ? '' : '<div class="no"><b>✦</b>بدون صورة</div>') + '</div>' +
+      '<span class="badge" style="background:var(--wine);color:#fff">' + (s.total - s.sold) + ' قطعة</span>' + (s.bad.length ? '<span class="badge" style="top:56px;inset-inline-start:auto;inset-inline-end:8px;background:#C98A00;color:#fff">⚠ ألوان</span>' : '') +
+      '<div class="bd"><div class="cd">' + esc(m) + (inf.n ? ' · ' + esc(inf.n) : '') + '</div><div class="ds">' + parts.join(' · ') + '</div><div class="pr">' + fmt(f.sp) + ' ر.ع</div></div></button>';
+  }).join('');
+}
+function stepRow(id, label, max, v) {
+  return '<div class="bt" style="align-items:center"><div class="n">' + esc(label) + '</div><div class="o" style="display:flex;gap:6px;align-items:center"><button class="chip" data-st="-1" data-for="' + id + '">−</button><b data-v="' + id + '" data-max="' + max + '" style="min-width:24px;text-align:center">' + (v || 0) + '</b><button class="chip" data-st="1" data-for="' + id + '">＋</button></div></div>';
+}
+function bindSteps(el, onChange) {
+  $$('[data-st]', el).forEach(function (b) {
+    b.onclick = function () {
+      var v = $('[data-v="' + b.getAttribute('data-for') + '"]', el), max = Number(v.getAttribute('data-max')), n = Math.max(0, Math.min(max, Number(v.textContent) + Number(b.getAttribute('data-st'))));
+      v.textContent = n; onChange && onChange();
+    };
+  });
+}
+function readSteps(el) { var out = []; $$('[data-v]', el).forEach(function (v) { var n = Number(v.textContent); if (n > 0) out.push({c: v.getAttribute('data-name'), n: n}); }); return out; }
+function colorRows(m, loc, count, prefill) {
+  var s = modelStats(m), arr = (s.cols[loc] || []).slice(), sum = arr.reduce(function (a, x) { return a + x.n; }, 0), h = '';
+  arr.forEach(function (x, i) { h += stepRow('c' + i, x.c, x.n, prefill ? x.n : 0).replace('data-v="c' + i + '"', 'data-v="c' + i + '" data-name="' + esc(x.c) + '"'); });
+  if (count - sum > 0) h += stepRow('cu', 'غير محدد', count - sum, 0).replace('data-v="cu"', 'data-v="cu" data-name="غير محدد"');
+  return h;
+}
+function modelSheet(m) {
+  var s = modelStats(m), inf = modelInfo(m);
+  var h = '<h2>' + esc(m) + (inf.n ? ' · ' + esc(inf.n) : '') + '</h2><div class="stale" style="margin:-6px 0 10px">المجموع ' + s.total + ' · مباع ' + s.sold + (s.tr ? ' · في الطريق ' + s.tr : '') + '</div>';
+  s.locs.forEach(function (l) {
+    var sum = (s.cols[l] || []).reduce(function (a, x) { return a + x.n; }, 0), bad = sum !== s.loc[l];
+    h += '<div class="card" style="margin:0 0 8px;padding:10px"><div class="kv"><span>' + esc(l) + '</span><b>' + s.loc[l] + ' قطعة</b></div><div class="stale">' + (colTxt(s.cols[l]) || 'لا ألوان مسجلة') + '</div>' +
+      (bad ? '<div class="sum" style="background:#FFF3D6;margin-top:6px">⚠ مجموع الألوان ' + sum + ' والقطع ' + s.loc[l] + '</div>' : '') + '<button class="chip" style="margin-top:6px" data-ce="' + esc(l) + '">تحديث الألوان</button></div>';
+  });
+  h += '<div class="f"><label>اسم الموديل / النوع (للمرجع فقط)</label><input id="mn" value="' + esc(inf.n) + '"></div><div class="f"><label>ملاحظة</label><input id="mt" value="' + esc(inf.t) + '"></div><button class="act" style="width:100%;margin-bottom:10px" id="msv">حفظ الملاحظة</button>';
+  var mainN = s.loc[MAIN] || 0, btN = s.locs.length - (mainN ? 1 : 0);
+  h += '<div class="acts">' + (mainN ? '<button class="act pri" id="mmv">نقل لبوتيك</button>' : '') + (btN ? '<button class="act" id="mbk">إرجاع للمخزن</button>' : '') + ((mainN || btN) ? '<button class="act full" id="msl">بيع بالعدد</button>' : '') + '</div>';
+  h += '<details style="margin-top:10px"><summary>القطع (' + s.total + ')</summary>' + s.items.map(function (x) { return '<div class="bt" data-c="' + esc(x.c) + '"><div><div class="n" style="direction:ltr">' + esc(x.c) + ' ‹</div><div class="m">' + esc(x.st) + (x.loc && stKey(x) === 'bt' ? ' · ' + esc(x.loc) : '') + '</div></div></div>'; }).join('') + '</details>';
+  sheet(h, function (el, close) {
+    $('#msv', el).onclick = function () { api('modelNote', {m: m, note: $('#mt', el).value.trim(), name: $('#mn', el).value.trim()}).then(function (r) { after(r); }); };
+    $$('[data-ce]', el).forEach(function (b) { b.onclick = function () { close(); colorEditor(m, b.getAttribute('data-ce')); }; });
+    $$('.bt[data-c]', el).forEach(function (r) { r.onclick = function () { close(); openItem(r.getAttribute('data-c')); }; });
+    var on = function (id, fn) { var e = $(id, el); if (e) e.onclick = function () { close(); fn(); }; };
+    on('#mmv', function () { modelMove(m); }); on('#mbk', function () { modelBack(m); }); on('#msl', function () { modelSell(m); });
+  });
+}
+function colorEditor(m, loc) {
+  var s = modelStats(m), cnt = s.loc[loc] || 0, arr = (s.cols[loc] || []);
+  sheet('<h2>ألوان ' + esc(m) + ' في ' + esc(loc) + '</h2><div class="sum" id="cs"></div><div id="cl">' + arr.map(function (x) { return colRow(x.c, x.n); }).join('') + '</div><button class="chip" id="ca">＋ لون</button><button class="act pri" style="width:100%;margin-top:12px" id="ok">حفظ</button>', function (el, close) {
+    function read() { var o = []; $$('.cr', el).forEach(function (r) { var c = $('.cn', r).value.trim(), n = Math.floor(Number($('.cv', r).value)); if (c && n > 0) o.push({c: c, n: n}); }); return o; }
+    function upd() { var t = read().reduce(function (a, x) { return a + x.n; }, 0); $('#cs', el).textContent = 'مجموع الألوان ' + t + ' من ' + cnt + ' قطعة' + (t === cnt ? ' ✓' : ' ⚠'); }
+    function bind() { $$('.cr input', el).forEach(function (i) { i.oninput = upd; }); $$('.cr .rm', el).forEach(function (b) { b.onclick = function () { b.parentNode.remove(); upd(); }; }); }
+    $('#ca', el).onclick = function () { $('#cl', el).insertAdjacentHTML('beforeend', colRow('', '')); bind(); };
+    bind(); upd();
+    $('#ok', el).onclick = function () {
+      var o = read(), t = o.reduce(function (a, x) { return a + x.n; }, 0);
+      if (t !== cnt && !confirm('مجموع الألوان ' + t + ' لا يساوي ' + cnt + '. حفظ على أي حال؟')) return;
+      close(); api('colorSet', {m: m, loc: loc, colors: o}).then(after);
+    };
+  });
+}
+function colRow(c, n) { return '<div class="cr" style="display:flex;gap:6px;margin-bottom:8px"><input class="cn" placeholder="اللون" value="' + esc(c) + '" style="flex:1"><input class="cv" type="number" inputmode="numeric" value="' + esc(n) + '" style="width:70px;text-align:center"><button class="chip rm">✕</button></div>'; }
+function pickLoc(title, names, cb) {
+  sheet('<h2>' + esc(title) + '</h2><div class="bts" id="bts">' + names.map(function (n) { return '<button class="chip" data-n="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div>', function (el, close) {
+    $$('#bts .chip', el).forEach(function (c) { c.onclick = function () { close(); cb(c.getAttribute('data-n')); }; });
+  });
+}
+function modelMove(m) {
+  var s = modelStats(m), main = s.loc[MAIN] || 0, names = (S.meta && S.meta.boutiques) || [];
+  sheet('<h2>نقل ' + esc(m) + ' إلى بوتيك</h2><div class="stale">في المخزن ' + main + ' قطعة. حدّد الألوان المنقولة:</div><div id="cr">' + colorRows(m, MAIN, main, false) + '</div><div class="sum" id="cs"></div>' +
+    '<div class="f"><label>البوتيك</label><div class="bts" id="bts">' + names.map(function (n) { return '<button class="chip" data-n="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div></div><div class="f"><label>أو اسم بوتيك جديد</label><input id="nn"></div><button class="act pri" style="width:100%" id="ok">نقل</button>', function (el, close) {
+    var pick = ''; function upd() { var t = readSteps(el).reduce(function (a, x) { return a + x.n; }, 0); $('#cs', el).textContent = 'سيُنقل ' + t + ' قطعة'; }
+    bindSteps(el, upd); upd();
+    $$('#bts .chip', el).forEach(function (c) { c.onclick = function () { pick = c.getAttribute('data-n'); $('#nn', el).value = ''; $$('#bts .chip', el).forEach(function (x) { x.classList.toggle('on', x === c); }); }; });
+    $('#nn', el).oninput = function () { pick = ''; $$('#bts .chip', el).forEach(function (x) { x.classList.remove('on'); }); };
+    $('#ok', el).onclick = function () {
+      var cl = readSteps(el), n = cl.reduce(function (a, x) { return a + x.n; }, 0), to = pick || $('#nn', el).value.trim();
+      if (!n) return toast('حدّد القطع المنقولة', true); if (!to) return toast('اختر البوتيك', true);
+      close(); api('modelOp', {op: 'move', m: m, n: n, to: to, colors: cl}).then(after);
+    };
+  });
+}
+function modelBack(m) {
+  var s = modelStats(m), bts = s.locs.filter(function (l) { return l !== MAIN; });
+  var go = function (loc) {
+    var cnt = s.loc[loc];
+    sheet('<h2>إرجاع ' + esc(m) + ' من ' + esc(loc) + '</h2><div class="stale">عندهم ' + cnt + ' قطعة. حدّد الألوان المرجعة:</div><div id="cr">' + colorRows(m, loc, cnt, false) + '</div><div class="sum" id="cs"></div><button class="act pri" style="width:100%" id="ok">إرجاع</button>', function (el, close) {
+      function upd() { var t = readSteps(el).reduce(function (a, x) { return a + x.n; }, 0); $('#cs', el).textContent = 'سيُرجَع ' + t + ' قطعة'; }
+      bindSteps(el, upd); upd();
+      $('#ok', el).onclick = function () { var cl = readSteps(el), n = cl.reduce(function (a, x) { return a + x.n; }, 0); if (!n) return toast('حدّد القطع', true); close(); api('modelOp', {op: 'back', m: m, n: n, loc: loc, colors: cl}).then(after); };
+    });
+  };
+  if (bts.length === 1) go(bts[0]); else pickLoc('إرجاع من أي بوتيك؟', bts, go);
+}
+function modelSell(m) {
+  var s = modelStats(m);
+  var go = function (loc) {
+    var cnt = s.loc[loc], sp = (s.first && s.first.sp) || '';
+    sheet('<h2>بيع ' + esc(m) + ' من ' + esc(loc) + '</h2><div class="stale">المتوفر ' + cnt + ' قطعة' + (loc !== MAIN ? ' — يُستلم المبلغ منهم' : '') + '. اللون غير مطلوب.</div>' + numField('qn', 'عدد القطع المباعة') + numField('pr', 'سعر القطعة (ر.ع)') + '<div class="f"><label>التاريخ (اختياري)</label><input id="dt" type="date"></div><button class="act pri" style="width:100%" id="ok">تسجيل البيع</button>', function (el, close) {
+      $('#qn', el).value = 1; $('#pr', el).value = sp;
+      $('#ok', el).onclick = function () {
+        var n = Math.floor(Number($('#qn', el).value)), p = Number($('#pr', el).value);
+        if (!(n >= 1) || n > cnt) return toast('العدد من 1 إلى ' + cnt, true); if (!(p > 0)) return toast('اكتب السعر', true);
+        close(); api('modelOp', {op: 'sell', m: m, n: n, loc: loc, price: p, date: $('#dt', el).value}).then(after);
+      };
+    });
+  };
+  if (s.locs.length === 1) go(s.locs[0]); else pickLoc('البيع من أين؟', s.locs, go);
 }
 
 /* ---------- item sheet ---------- */
@@ -771,7 +910,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 22</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 23</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -1080,7 +1219,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=22').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=23').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
