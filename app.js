@@ -477,15 +477,28 @@ function modelStats(m) {
 }
 function colTxt(arr) { return (arr || []).map(function (x) { return esc(x.c) + ' ' + x.n; }).join(' · '); }
 function modelCards(list) {
-  var seen = {}, ms = [];
+  var seen = {}, ms = [], F = S.filter;
   list.forEach(function (i) { if (i.m && !seen[i.m]) { seen[i.m] = 1; ms.push(i.m); } });
   return ms.map(function (m) {
-    var s = modelStats(m), inf = modelInfo(m), f = s.first || {};
-    var parts = s.locs.map(function (l) { return (l === MAIN ? 'مخزن' : esc(l)) + ' ' + s.loc[l]; });
-    if (s.tr) parts.push('في الطريق ' + s.tr); if (s.sold) parts.push('مباع ' + s.sold);
+    var s = modelStats(m), inf = modelInfo(m), f = s.first || {}, cnt, lines = [], bad = false, lbl = '';
+    function colsOf(ls) { var t = {}; ls.forEach(function (l) { (s.cols[l] || []).forEach(function (x) { t[x.c] = (t[x.c] || 0) + x.n; }); }); return Object.keys(t).map(function (c) { return {c: c, n: t[c]}; }); }
+    function sumC(a) { return a.reduce(function (z, x) { return z + x.n; }, 0); }
+    if (F === 'main' || F === 'bt') {
+      var ls = s.locs.filter(function (l) { return F === 'main' ? l === MAIN : l !== MAIN; });
+      cnt = ls.reduce(function (z, l) { return z + s.loc[l]; }, 0);
+      var cs = colsOf(ls); bad = sumC(cs) !== cnt;
+      if (F === 'bt') ls.forEach(function (l) { lines.push(esc(l) + ' ' + s.loc[l]); });
+      lines.push(colTxt(cs) || 'لا ألوان مسجلة'); lbl = cnt + ' قطعة';
+    } else if (F === 'sold') { cnt = s.sold; lbl = cnt + ' مباع'; }
+    else if (F === 'tr') { cnt = s.tr; lbl = cnt + ' في الطريق'; }
+    else {
+      cnt = s.total - s.sold; bad = s.bad.length > 0; lbl = cnt + ' قطعة';
+      s.locs.forEach(function (l) { lines.push((l === MAIN ? 'مخزن' : esc(l)) + ' ' + s.loc[l]); });
+      if (s.tr) lines.push('في الطريق ' + s.tr); if (s.sold) lines.push('مباع ' + s.sold);
+    }
     return '<button class="it" data-m="' + esc(m) + '"><div class="ph" data-ph="' + (f.ph ? f.ph + '@360' : '') + '" data-id="' + esc(f.ph || '') + '">' + (f.ph ? '' : '<div class="no"><b>✦</b>بدون صورة</div>') + '</div>' +
-      '<span class="badge" style="background:var(--wine);color:#fff">' + (s.total - s.sold) + ' قطعة</span>' + (s.bad.length ? '<span class="badge" style="top:56px;inset-inline-start:auto;inset-inline-end:8px;background:#C98A00;color:#fff">⚠ ألوان</span>' : '') +
-      '<div class="bd"><div class="cd">' + esc(m) + (inf.n ? ' · ' + esc(inf.n) : '') + '</div><div class="ds">' + parts.join(' · ') + '</div><div class="pr">' + fmt(f.sp) + ' ر.ع</div></div></button>';
+      '<span class="badge" style="background:var(--wine);color:#fff">' + lbl + '</span>' + (bad ? '<span class="badge" style="top:56px;inset-inline-start:auto;inset-inline-end:8px;background:#C98A00;color:#fff">⚠ ألوان</span>' : '') +
+      '<div class="bd"><div class="cd">' + esc(m) + (inf.n ? ' · ' + esc(inf.n) : '') + '</div><div class="ds">' + lines.join(' · ') + '</div><div class="pr">' + fmt(f.sp) + ' ر.ع</div></div></button>';
   }).join('');
 }
 function stepRow(id, label, max, v) {
@@ -910,7 +923,7 @@ function settingsSheet() {
     '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
-    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 23</div>', function (el, close) {
+    '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 24</div>', function (el, close) {
     $('#s1', el).onclick = function () { close(); addBoutiqueSheet(); };
     $('#s2', el).onclick = function () { close(); pinSheet(); };
     $('#s3', el).onclick = function () {
@@ -1219,7 +1232,7 @@ function invoiceSheet(items) {
 }
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=23').catch(function () {}); }); }
+if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js?v=24').catch(function () {}); }); }
 render();
 if (S.token) loadAll(true);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S.token && Date.now() - S.stamp > 60000) loadAll(true); });
