@@ -335,11 +335,12 @@ function viewGoals() {
     }).join('') + (p.gate_note ? '<div class="stale" style="margin-top:8px">' + esc(p.gate_note) + '</div>' : '') + '</div>' : '') +
     '<div class="card"><h3>كل الأهداف المفتوحة (' + open.length + ')</h3>' + (open.length ? open.map(function (x, i) { return goalRow(x, i); }).join('') : '<div class="empty">لا أهداف مفتوحة</div>') + '</div>' +
     (done.length ? '<div class="card"><h3>المنجزة (' + done.length + ')</h3>' + done.map(function (x) { return goalRow(x, -1); }).join('') + '</div>' : '') +
+    barsCard() +
     (g.months && g.months.length ? '<div class="card"><h3>مسار 2027 (الهدف / المحقق)</h3>' + g.months.map(function (m) {
       return '<div class="kv"><span>' + esc(m.m) + '</span><b>' + fmt0(m.c) + ' / ' + fmt0(m.t) + '</b></div>';
     }).join('') + '</div>' : '') +
     '<div class="card"><h3>ملخص الشهر</h3>' + g.summary.map(function (t) { return '<div class="stale">' + esc(t) + '</div>'; }).join('') + '</div>';
-  bindGoals(b);
+  bindGoals(b); if (S.dash) bindCharts(b, S.dash);
 }
 function pbar(p, c) { p = Math.max(0, Math.min(1, p || 0)); return '<div style="height:10px;background:#EADCDD;border-radius:6px;overflow:hidden;margin:6px 0"><div style="height:100%;width:' + Math.round(p * 100) + '%;background:' + (c || 'var(--wine)') + '"></div></div>'; }
 function goalAlerts(g) {
@@ -1328,6 +1329,111 @@ function rulesCard() {
     ruleLine(s.left <= s.cap, 'دين ' + esc(s.name), fmt(s.left) + ' من ' + fmt0(s.cap), s.left / s.cap, s.left > s.cap) +
     ruleLine(cashOk, 'النقد مقابل دين المورد', fmt(P.sys.cash) + ' / ' + fmt(s.left)) +
     (cashOk ? '' : '<div class="sum" style="background:#FBE9EA;color:var(--bad);margin:8px 0 0">لا تُدفع أقساط الشقة من نقد المشروع الآن.</div>') + '</div>';
+}
+
+/* ----- رسوم الرئيسية (SVG بدون مكتبات) ----- */
+var CH = {set: 'where', pick: -1, mon: -1};
+function donutData(d) {
+  var P = S.plan, inv = d.inv;
+  /* يظهر فقط ما فيه قطع: «في الطريق» و«في المعرض» يختفيان وحدهما إن كانا صفراً. */
+  if (CH.set === 'sold' && P) { var c = P.chart.channels; return [{l: 'عبر البوتيك', n: c.bt, col: 'var(--warn)'}, {l: 'في المعرض', n: c.expo || 0, col: 'var(--gold)'}, {l: 'بيع مباشر', n: c.direct, col: 'var(--ok)'}, {l: 'بيع آجل', n: c.credit, col: 'var(--info)'}].filter(function (x) { return x.n > 0; }); }
+  var ex = {n: 0, v: 0}, EX = (S.meta && S.meta.expos) || [];
+  ((S.inv && S.inv.items) || []).forEach(function (i) { if (i.st === 'في البوتيك' && EX.indexOf(i.loc) >= 0) { ex.n++; ex.v += Number(i.tc) || 0; } });
+  return [{l: 'في المخزن', n: inv.main.n, v: inv.main.v, col: 'var(--ok)'}, {l: 'في البوتيكات', n: inv.boutique.n - ex.n, v: inv.boutique.v - ex.v, col: 'var(--warn)'}, {l: 'في المعرض', n: ex.n, v: ex.v, col: 'var(--gold)'}, {l: 'في الطريق', n: inv.transit.n, v: inv.transit.v, col: 'var(--info)'}].filter(function (x) { return x.n > 0; });
+}
+function donutHTML(d) {
+  var data = donutData(d), tot = 0, R = 54, CIR = 2 * Math.PI * R, cum = 0;
+  data.forEach(function (x) { tot += x.n; });
+  var segs = data.map(function (x, i) {
+    var len = tot ? x.n / tot * CIR : 0, s = '<circle class="seg' + (CH.pick === i ? ' on' : '') + '" data-i="' + i + '" cx="80" cy="80" r="' + R + '" fill="none" stroke="' + x.col + '" stroke-width="' + (CH.pick === i ? 26 : 20) + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (CIR - len).toFixed(2) + '" stroke-dashoffset="' + (-cum).toFixed(2) + '"></circle>';
+    cum += len; return s;
+  }).join('');
+  var p = data[CH.pick], mid = p ? '<text x="80" y="74" text-anchor="middle" class="dn">' + fmt0(p.n) + '</text><text x="80" y="96" text-anchor="middle" class="dl">' + esc(p.l) + '</text>' : '<text x="80" y="74" text-anchor="middle" class="dn">' + fmt0(tot) + '</text><text x="80" y="96" text-anchor="middle" class="dl">' + (CH.set === 'sold' ? 'قطعة مباعة' : 'قطعة عندنا') + '</text>';
+  return '<div class="dwrap"><svg viewBox="0 0 160 160" class="donut" role="img" aria-label="توزيع القطع"><circle cx="80" cy="80" r="' + R + '" fill="none" stroke="#EADCDD" stroke-width="20"></circle><g transform="rotate(-90 80 80)">' + segs + '</g>' + mid + '</svg>' +
+    '<div class="dleg">' + data.map(function (x, i) { return '<button class="lg' + (CH.pick === i ? ' on' : '') + '" data-i="' + i + '"><i style="background:' + x.col + '"></i><span>' + esc(x.l) + '</span><b>' + fmt0(x.n) + (x.v != null ? '<small>' + fmt(x.v) + ' ر.ع</small>' : '') + '</b></button>'; }).join('') + '</div></div>';
+}
+function barsHTML() {
+  var P = S.plan; if (!P) return '';
+  var ms = P.chart.months, mx = 1; ms.forEach(function (m) { mx = Math.max(mx, m.t, m.c); });
+  var sel = CH.mon >= 0 ? ms[CH.mon] : ms.filter(function (m) { return m.cur; })[0];
+  return '<div class="mbars">' + ms.map(function (m, i) {
+    return '<button class="mcol' + (m.cur ? ' cur' : '') + (sel === m ? ' on' : '') + '" data-m="' + i + '"><span class="mv">' + m.c + (m.t ? '<small>/' + m.t + '</small>' : '') + '</span><span class="mtrack"><span class="mt" style="height:' + Math.round(m.t / mx * 100) + '%"></span><span class="mc" data-h="' + Math.round(m.c / mx * 100) + '" style="height:0%"></span></span><span class="ml">' + esc(m.l) + '</span></button>';
+  }).join('') + '</div>' + (sel ? '<div class="sum" style="margin:10px 0 0">' + esc(sel.l) + ': بيعت <b>' + sel.c + '</b>' + (sel.t ? ' من هدف <b>' + sel.t + '</b> قطعة' : ' قطعة') + ' · المبيعات ' + fmt(sel.sales) + ' · صافي الربح <b class="' + (sel.net >= 0 ? 'pos' : 'neg') + '">' + fmt(sel.net) + '</b></div>' : '');
+}
+function homeCharts(d) {
+  return '<div class="card" id="chd"><h3>أين القطع وكيف بيعت</h3><div class="chips" style="margin-bottom:2px"><button class="chip' + (CH.set === 'where' ? ' on' : '') + '" data-set="where">أين القطع الآن</button><button class="chip' + (CH.set === 'sold' ? ' on' : '') + '" data-set="sold">كيف بيعت</button></div><div id="dn">' + donutHTML(d) + '</div><div class="stale" style="margin:6px 0 0">اضغطي على أي لون لرؤية تفاصيله</div></div>' +
+    '';
+}
+/* أعمدة الأشهر نُقلت إلى تبويب الأهداف، و«النقد مقابل دين المورد» أُزيلت من الرئيسية لأنها مكررة مع تبويب المورد وبطاقة القواعد. */
+function barsCard() { return S.plan ? '<div class="card" id="chm"><h3>القطع المباعة كل شهر مقابل الهدف</h3><div id="mb">' + barsHTML() + '</div><div class="stale" style="margin:6px 0 0">اضغطي على شهر لرؤية مبيعاته وربحه</div></div>' : ''; }
+function animateCharts(b) { setTimeout(function () { $$('.mc', b).forEach(function (e) { e.style.height = e.getAttribute('data-h') + '%'; }); $$('.hf', b).forEach(function (e) { e.style.width = e.getAttribute('data-w') + '%'; }); }, 40); }
+function bindCharts(b, d) {
+  function bindDonut() { $$('#dn [data-i]', b).forEach(function (e) { e.onclick = function () { var i = Number(e.getAttribute('data-i')); CH.pick = CH.pick === i ? -1 : i; $('#dn', b).innerHTML = donutHTML(d); bindDonut(); }; }); }
+  function bindBars() { $$('#mb [data-m]', b).forEach(function (e) { e.onclick = function () { CH.mon = Number(e.getAttribute('data-m')); $('#mb', b).innerHTML = barsHTML(); bindBars(); animateCharts(b); }; }); }
+  $$('#chd [data-set]', b).forEach(function (e) { e.onclick = function () { CH.set = e.getAttribute('data-set'); CH.pick = -1; $$('#chd [data-set]', b).forEach(function (x) { x.classList.toggle('on', x === e); }); $('#dn', b).innerHTML = donutHTML(d); bindDonut(); }; });
+  if ($('#dn', b)) bindDonut(); if ($('#mb', b)) bindBars(); animateCharts(b);
+}
+
+/* ----- الشهور: بطاقة شهر واحد مع أسهم للتنقل، وتفاصيل المصروفات، وقفل الشهر المنتهي ----- */
+var MON = {k: ''};
+function monthData(fallback) {
+  var L = (S.plan && S.plan.mlist) || [], cur = L.filter(function (x) { return x.k === MON.k; })[0];
+  if (!cur && L.length) { cur = L[L.length - 1]; MON.k = cur.k; }
+  return {list: L, cur: cur, i: L.indexOf(cur)};
+}
+function monthCard(m) {
+  var D = monthData(), x = D.cur;
+  if (!x) return '<div class="card"><h3>أرباح وخسائر الشهر</h3><div class="kv"><span>المبيعات</span><b>' + fmt(m.sales) + '</b></div><div class="kv"><span>صافي الربح</span><b class="' + (m.net >= 0 ? 'pos' : 'neg') + '">' + fmt(m.net) + '</b></div></div>';
+  return '<div class="card"><div class="msw"><button id="mprev"' + (D.i <= 0 ? ' disabled' : '') + ' aria-label="الشهر السابق">›</button><div><b>' + esc(x.l) + '</b><span class="mtag ' + (x.closed ? 'cl' : 'op') + '">' + (x.closed ? '🔒 شهر منتهٍ' : 'الشهر الحالي') + '</span></div><button id="mnext"' + (D.i >= D.list.length - 1 ? ' disabled' : '') + ' aria-label="الشهر التالي">‹</button></div>' +
+    '<div style="text-align:center;margin:8px 0 4px"><span class="mtag ' + (x.net >= 0 ? 'op' : 'bd') + '">' + (x.net >= 0 ? 'ربح' : 'خسارة') + (x.closed ? '' : ' حتى الآن') + '</span></div>' +
+    '<div class="kv"><span>دخل: المبيعات <small style="color:var(--mute)">(' + fmt0(x.qty) + ' قطعة)</small></span><b class="pos">' + fmt(x.sales) + '</b></div>' +
+    '<div class="kv"><span>خرج: تكلفة القطع المباعة</span><b>' + fmt(x.soldCost) + '</b></div>' +
+    (x.giftN ? '<div class="kv"><span>خرج: هدايا <small style="color:var(--mute)">(' + x.giftN + ' قطعة)</small></span><b>' + fmt(x.gifts) + '</b></div>' : '') +
+    '<div class="bt jump" id="mexp"><div><div class="n" style="font-weight:500">خرج: الإيجار والمصاريف ‹</div><div class="m">' + (x.expenses.length ? x.expenses.length + ' بند · اضغطي للتفاصيل' : 'لا مصروفات مسجّلة') + '</div></div><div class="o" style="color:var(--ink)">' + fmt(x.opex) + '</div></div>' +
+    '<div class="kv"><span><b>الصافي</b></span><b class="' + (x.net >= 0 ? 'pos' : 'neg') + '">' + fmt(x.net) + '</b></div>' +
+    (x.draws ? '<div class="kv"><span>مسحوبات شخصية (خارج الربح)</span><b>' + fmt(x.draws) + '</b></div>' : '') +
+    (x.first ? '<div class="sum" style="margin:8px 0 0;background:#FFF4DC;color:#7A5A00">النظام بدأ يوم ' + dmy(S.plan.start) + '. ما قبله غير مسجّل هنا، مثل إيجار هذا الشهر ومبيعات البوتيك في أوله.</div>' : '') +
+    (x.edits && x.edits.length ? '<div class="sum" style="margin:8px 0 0">تعديلات بعد انتهاء الشهر: ' + x.edits.map(function (e) { return esc(e.what) + ' (' + esc(e.by) + '، ' + dmy(e.d) + ')'; }).join(' · ') + '</div>' : '') + '</div>';
+}
+function bindMonth(b, m) {
+  var D = monthData(), box = $('#mcard', b); if (!box || !D.cur) return;
+  function go(k) { var n = D.list[D.i + k]; if (!n) return; MON.k = n.k; box.innerHTML = monthCard(m); bindMonth(b, m); }
+  var p = $('#mprev', box), n = $('#mnext', box), e = $('#mexp', box);
+  if (p) p.onclick = function () { go(-1); }; if (n) n.onclick = function () { go(1); };
+  if (e) e.onclick = function () { expSheet(D.cur); };
+}
+function expSheet(x) {
+  sheet('<h2>مصروفات ' + esc(x.l) + '</h2><div class="sum">المجموع <b>' + fmt(x.opex) + ' ر.ع</b> · ' + x.expenses.length + ' بند' + (x.closed ? '<br>🔒 الشهر منتهٍ. الحذف والتعديل من حساب بلال فقط، من «سجل الحركات».' : '') + '</div>' +
+    (x.expenses.length ? x.expenses.map(function (e) { return '<div class="bt"><div><div class="n">' + esc(e.nt || e.p || 'مصروف') + '</div><div class="m">' + esc(e.d) + (e.p ? ' · ' + esc(e.p) : '') + (e.per ? ' · من مال شخصي' : '') + '</div></div><div class="o">' + fmt(e.a) + '</div></div>'; }).join('') : '<div class="empty">لا مصروفات مسجّلة في هذا الشهر</div>') +
+    (x.closed ? '' : '<button class="act pri" style="width:100%;margin-top:12px" id="ne">تسجيل مصروف جديد</button>'), function (el, close) {
+    if ($('#ne', el)) $('#ne', el).onclick = function () { close(); expenseSheet(); };
+  });
+}
+/* ----- الموديلات الراكدة (من بيانات المخزون، بلا خادم) ----- */
+function dayDiff(a, b) { return Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 864e5); }
+function slowList() {
+  var P = S.plan, inv = S.inv; if (!P || !inv || !inv.models) return [];
+  return inv.models.map(function (x) {
+    var s = modelStats(x.m), stock = s.total - s.sold - s.tr, last = '';
+    s.items.forEach(function (i) { if (i.st === 'مباع' && String(i.ch || '').indexOf('هدية') !== 0 && i.sd > last) last = i.sd; });
+    return {m: x.m, n: x.n, stock: stock, main: s.loc[MAIN] || 0, bt: stock - (s.loc[MAIN] || 0), last: last, days: dayDiff(last || P.start, P.today), sp: s.first ? s.first.sp : 0};
+  }).filter(function (x) { return x.stock > 0; }).sort(function (a, b) { return b.days - a.days || b.stock - a.stock; });
+}
+function slowCard() {
+  var L = slowList(); if (!L.length) return '';
+  var slow = L.filter(function (x) { return x.days >= 30; }), never = L.filter(function (x) { return !x.last; }), pcs = 0, npcs = 0;
+  slow.forEach(function (x) { pcs += x.stock; }); never.forEach(function (x) { npcs += x.stock; });
+  return '<div class="card"><h3>الموديلات الراكدة</h3><div class="kv"><span>بلا بيع منذ 30 يوماً أو أكثر</span><b>' + slow.length + ' موديل · ' + pcs + ' قطعة</b></div>' +
+    '<div class="kv"><span>لم يُبع منها شيء منذ بدء النظام</span><b>' + never.length + ' موديل · ' + npcs + ' قطعة</b></div>' +
+    '<button class="chip" id="slw" style="margin-top:10px">عرض القائمة مرتبة ‹</button></div>';
+}
+function slowSheet() {
+  var L = slowList();
+  sheet('<h2>الموديلات من الأبطأ إلى الأسرع</h2><div class="stale" style="margin:-6px 0 10px">اضغطي على موديل لفتحه (نقل، إرجاع، بيع)</div>' + L.map(function (x) {
+    return '<div class="bt" data-sm="' + esc(x.m) + '" style="cursor:pointer"><div><div class="n">' + esc(x.m) + (x.n ? ' · ' + esc(x.n) : '') + ' ‹</div><div class="m">' + (x.last ? 'آخر بيع ' + dmy(x.last) + ' · منذ ' + x.days + ' يوماً' : 'لم يُبع بعد · ' + x.days + ' يوماً منذ بدء النظام') + ' · مخزن ' + x.main + ' · بوتيك ' + x.bt + '</div></div><div class="o ' + (x.days >= 30 ? 'neg' : '') + '">' + x.stock + '<div class="m">قطعة</div></div></div>';
+  }).join(''), function (el, close) {
+    $$('[data-sm]', el).forEach(function (r) { r.onclick = function () { close(); modelSheet(r.getAttribute('data-sm')); }; });
+  });
 }
 
 /* ----- ربط المطابقة بشاشة الجرد الموجودة (النسخة 25) ----- */
