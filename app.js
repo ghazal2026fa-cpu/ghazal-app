@@ -379,12 +379,17 @@ function stKey(it) { return (STATUS[it.st] || ['main'])[0]; }
 function viewInv() {
   var b = $('#body'), inv = S.inv;
   if (!inv) { b.innerHTML = '<div class="sk" style="height:60px"></div><div class="sk" style="height:300px"></div>'; return; }
-  var items = inv.items, cnt = {all: items.length, main: 0, bt: 0, sold: 0, tr: 0};
-  items.forEach(function (i) { cnt[stKey(i)]++; });
-  var F = [['all', 'الكل'], ['main', 'في المخزن'], ['bt', 'في البوتيك'], ['sold', 'مباع'], ['tr', 'في الطريق']];
+  /* الفلاتر بأسماء الأماكن: كل بوتيك أو معرض فيه قطع يظهر باسمه، و«في الطريق» يظهر فقط إن كان فيه شيء. */
+  var items = inv.items, cnt = {all: items.length, main: 0, bt: 0, sold: 0, tr: 0}, locs = [], EX = (S.meta && S.meta.expos) || [];
+  items.forEach(function (i) { cnt[stKey(i)]++; if (stKey(i) === 'bt') { var k = 'L:' + (i.loc || '؟'); if (cnt[k] == null) { cnt[k] = 0; locs.push(i.loc || '؟'); } cnt[k]++; } });
+  var F = [['all', 'الكل'], ['main', 'المخزن']].concat(locs.map(function (l) { return ['L:' + l, (EX.indexOf(l) >= 0 ? '◆ ' : '') + l]; }), [['sold', 'مباع']], cnt.tr ? [['tr', 'في الطريق']] : []);
+  if (!F.some(function (f) { return f[0] === S.filter; })) S.filter = 'all';
+  var lf = S.filter.indexOf('L:') === 0 ? S.filter.slice(2) : '';
   b.innerHTML = '<div class="search"><input id="q" type="search" placeholder="ابحث بالكود أو الوصف أو اللون" value="' + esc(S.q) + '"><button id="sl" class="' + (S.select ? 'on' : '') + '">' + (S.select ? 'إلغاء' : 'تحديد') + '</button></div>' +
     '<div class="chips">' + F.map(function (f) { return '<button class="chip ' + (S.filter === f[0] ? 'on' : '') + '" data-f="' + f[0] + '">' + f[1] + '<i>' + cnt[f[0]] + '</i></button>'; }).join('') + '</div>' +
+    (lf ? '<button class="act" style="width:100%;margin-bottom:10px" id="lopen">صفحة ' + esc(lf) + ' (بيع، إرجاع، نقل' + (EX.indexOf(lf) >= 0 ? '، إنهاء المعرض' : '') + ') ‹</button>' : '') +
     '<div class="items" id="items"></div>';
+  if ($('#lopen')) $('#lopen').onclick = function () { boutiqueSheet(lf); };
   $('#q').oninput = function () { S.q = this.value; fillItems(); };
   $('#sl').onclick = function () { S.select = !S.select; S.sel = {}; renderBody(); };
   $$('.chip').forEach(function (c) { c.onclick = function () { S.filter = c.getAttribute('data-f'); renderBody(); }; });
@@ -394,7 +399,8 @@ function fillItems() {
   var box = $('#items'); if (!box || !S.inv) return;
   var q = S.q.trim().toLowerCase(), order = {main: 0, bt: 1, tr: 2, sold: 3};
   var list = S.inv.items.filter(function (i) {
-    if (S.filter !== 'all' && stKey(i) !== S.filter) return false;
+    if (S.filter.indexOf('L:') === 0) { if (stKey(i) !== 'bt' || (i.loc || '؟') !== S.filter.slice(2)) return false; }
+    else if (S.filter !== 'all' && stKey(i) !== S.filter) return false;
     if (!q) return true;
     var mi = i.m ? modelInfo(i.m) : {}, cs = i.m ? ((S.inv.colors || []).filter(function (c) { return c.m === i.m; }).map(function (c) { return c.c; }).join(' ')) : '';
     return (i.c + ' ' + i.d + ' ' + i.s + ' ' + (i.loc || '') + ' ' + (i.m || '') + ' ' + (mi.n || '') + ' ' + (mi.t || '') + ' ' + cs).toLowerCase().indexOf(q) >= 0;
@@ -488,8 +494,8 @@ function modelCards(list) {
     var s = modelStats(m), inf = modelInfo(m), f = s.first || {}, cnt, lines = [], bad = false, lbl = '';
     function colsOf(ls) { var t = {}; ls.forEach(function (l) { (s.cols[l] || []).forEach(function (x) { t[x.c] = (t[x.c] || 0) + x.n; }); }); return Object.keys(t).map(function (c) { return {c: c, n: t[c]}; }); }
     function sumC(a) { return a.reduce(function (z, x) { return z + x.n; }, 0); }
-    if (F === 'main' || F === 'bt') {
-      var ls = s.locs.filter(function (l) { return F === 'main' ? l === MAIN : l !== MAIN; });
+    if (F === 'main' || F === 'bt' || F.indexOf('L:') === 0) {
+      var ls = s.locs.filter(function (l) { return F === 'main' ? l === MAIN : F === 'bt' ? l !== MAIN : l === F.slice(2); });
       cnt = ls.reduce(function (z, l) { return z + s.loc[l]; }, 0);
       var cs = colsOf(ls); bad = sumC(cs) !== cnt;
       if (F === 'bt') ls.forEach(function (l) { lines.push(esc(l) + ' ' + s.loc[l]); });
@@ -521,7 +527,7 @@ function readSteps(el) { var out = []; $$('[data-v]', el).forEach(function (v) {
 function colorRows(m, loc, count, prefill) {
   var s = modelStats(m), arr = (s.cols[loc] || []).slice(), sum = arr.reduce(function (a, x) { return a + x.n; }, 0), h = '';
   arr.forEach(function (x, i) { h += stepRow('c' + i, x.c, x.n, prefill ? x.n : 0).replace('data-v="c' + i + '"', 'data-v="c' + i + '" data-name="' + esc(x.c) + '"'); });
-  if (count - sum > 0) h += stepRow('cu', 'غير محدد', count - sum, 0).replace('data-v="cu"', 'data-v="cu" data-name="غير محدد"');
+  if (count - sum > 0) h += stepRow('cu', 'غير محدد', count - sum, prefill ? count - sum : 0).replace('data-v="cu"', 'data-v="cu" data-name="غير محدد"');
   return h;
 }
 function modelSheet(m) {
@@ -584,7 +590,7 @@ function modelBack(m) {
   var s = modelStats(m), bts = s.locs.filter(function (l) { return l !== MAIN; });
   var go = function (loc) {
     var cnt = s.loc[loc];
-    sheet('<h2>إرجاع ' + esc(m) + ' من ' + esc(loc) + '</h2><div class="stale">عندهم ' + cnt + ' قطعة. حدّد الألوان المرجعة:</div><div id="cr">' + colorRows(m, loc, cnt, false) + '</div><div class="sum" id="cs"></div><button class="act pri" style="width:100%" id="ok">إرجاع</button>', function (el, close) {
+    sheet('<h2>إرجاع ' + esc(m) + ' من ' + esc(loc) + '</h2><div class="stale">عندهم ' + cnt + ' قطعة، وكلها محددة للإرجاع بألوانها. أنقصي فقط ما سيبقى هناك.</div><div id="cr">' + colorRows(m, loc, cnt, true) + '</div><div class="sum" id="cs"></div><button class="act pri" style="width:100%" id="ok">إرجاع</button>', function (el, close) {
       function upd() { var t = readSteps(el).reduce(function (a, x) { return a + x.n; }, 0); $('#cs', el).textContent = 'سيُرجَع ' + t + ' قطعة'; }
       bindSteps(el, upd); upd();
       $('#ok', el).onclick = function () { var cl = readSteps(el), n = cl.reduce(function (a, x) { return a + x.n; }, 0); if (!n) return toast('حدّد القطع', true); close(); api('modelOp', {op: 'back', m: m, n: n, loc: loc, colors: cl}).then(after); };
@@ -898,6 +904,7 @@ function boutiqueSheet(name) {
   var items = S.inv ? S.inv.items : [];
   var here = items.filter(function (i) { return i.loc === name && i.st === 'في البوتيك'; });
   var inMain = items.filter(function (i) { return i.st === 'في المخزن'; });
+  if ((S.meta && S.meta.expos || []).indexOf(name) >= 0) return expoSheet(name, d, here, inMain);
   sheet('<h2>' + esc(name) + '</h2><div class="card">' +
     '<div class="kv"><span>عنده الآن</span><b>' + here.length + ' قطعة</b></div>' +
     '<div class="kv"><span>باع منذ بدء النظام</span><b>' + fmt0(d.sold) + ' قطعة · ' + fmt(d.soldVal) + '</b></div>' +
@@ -915,6 +922,29 @@ function boutiqueSheet(name) {
       on('#b-ar', function () { addArchiveSheet({kind: 'فاتورة بوتيك', ref: name}); });
       on('#b-back', function () { pickPieces({title: 'إرجاع من ' + name, items: here, label: 'إرجاع للمخزن', run: function (l) { api('back', {codes: l.map(function (x) { return x.code; })}).then(after); }}); });
       on('#b-move', function () { pickPieces({title: 'نقل إلى ' + name, items: inMain, label: 'نقل', run: function (l) { api('move', {codes: l.map(function (x) { return x.code; }), boutique: name}).then(after); }}); });
+    });
+}
+
+/* صفحة المعرض: مثل البوتيك بلا مستحق (البيع نقداً)، ومعها زر «إنهاء المعرض» يُرجع الباقي للمخزن ويُخفيه. */
+function expoSheet(name, d, here, inMain) {
+  sheet('<h2>' + esc(name) + ' <span class="mtag ex">معرض</span></h2><div class="card">' +
+    '<div class="kv"><span>فيه الآن</span><b>' + here.length + ' قطعة</b></div>' +
+    '<div class="kv"><span>باع</span><b>' + fmt0(d.sold) + ' قطعة · ' + fmt(d.soldVal) + '</b></div>' +
+    '<div class="stale" style="margin:6px 0 0;text-align:start">ما يُباع في المعرض يدخل النقد فوراً.</div></div>' +
+    '<div class="acts" style="margin-top:0"><button class="act pri" id="e-sell">تسجيل مبيعات</button><button class="act" id="e-move">نقل قطع إليه</button>' +
+    '<button class="act" id="e-back">إرجاع قطع</button><button class="act dng" id="e-end">إنهاء المعرض</button></div>' +
+    '<h3 style="margin-top:18px">القطع فيه (' + here.length + ')</h3>' +
+    (here.length ? here.map(function (i) { return '<div class="kv"><span>' + esc(i.d) + '<br><small style="color:var(--mute);direction:ltr;display:inline-block">' + esc(i.c) + '</small></span><b>' + fmt(i.sp) + '</b></div>'; }).join('') : '<div class="empty">لا توجد قطع فيه</div>'),
+    function (el, close) {
+      var on = function (id, fn) { $(id, el).onclick = function () { close(); fn(); }; };
+      on('#e-sell', function () { pickPieces({title: 'مبيعات ' + name, items: here, withPrice: true, label: 'تسجيل البيع', run: runSellMany}); });
+      on('#e-back', function () { pickPieces({title: 'إرجاع من ' + name, items: here, all: true, label: 'إرجاع للمخزن', run: function (l) { api('back', {codes: l.map(function (x) { return x.code; })}).then(after); }}); });
+      on('#e-move', function () { pickPieces({title: 'نقل إلى ' + name, items: inMain, label: 'نقل', run: function (l) { api('move', {codes: l.map(function (x) { return x.code; }), boutique: name}).then(after); }}); });
+      on('#e-end', function () {
+        sheet('<h2>إنهاء ' + esc(name) + '؟</h2><div class="sum">' + (here.length ? 'ترجع القطع الباقية (' + here.length + ') إلى المخزن بألوانها، ' : '') + 'ويختفي المعرض من الرئيسية والمخزون. مبيعاته تبقى محسوبة في شهرها.</div><button class="act pri" style="width:100%" id="ok">نعم، انتهى المعرض</button>', function (e2, c2) {
+          $('#ok', e2).onclick = function () { c2(); api('endExpo', {name: name}).then(after); };
+        });
+      });
     });
 }
 
@@ -980,7 +1010,7 @@ function countSheet() {
 /* ---------- settings / log ---------- */
 function settingsSheet() {
   sheet('<h2>الإعدادات</h2><div class="menu">' +
-    '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك<small>يظهر في التقارير وعند النقل</small></div></button>' +
+    '<button id="s1"><span class="i">＋</span><div>إضافة بوتيك أو معرض<small>يظهر في التقارير وعند النقل</small></div></button>' +
     '<button id="s2"><span class="i">⌘</span><div>تغيير الرقم السري<small>لحسابك أنت فقط</small></div></button>' +
     '<button id="s3"><span class="i">⌫</span><div>مسح ذاكرة الصور<small>إن ظهرت صورة قديمة بعد تغييرها</small></div></button></div>' +
     '<div class="stale" style="margin-top:14px">المستخدم: ' + esc(S.name || '') + ' · النسخة 25</div>', function (el, close) {
@@ -994,10 +1024,13 @@ function settingsSheet() {
   });
 }
 function addBoutiqueSheet() {
-  sheet('<h2>بوتيك جديد</h2><div class="f"><label>اسم البوتيك</label><input id="nm" placeholder="مثال: بوتيك الأناقة"></div><button class="act pri" style="width:100%" id="ok">إضافة</button>', function (el, close) {
+  sheet('<h2>بوتيك أو معرض جديد</h2><div class="cats" id="kd" style="margin-bottom:12px"><button class="chip on" data-k="bt">بوتيك</button><button class="chip" data-k="expo">معرض (أيام محدودة)</button></div>' +
+    '<div class="f"><label>الاسم</label><input id="nm" placeholder="مثال: بوتيك الأناقة"></div><div class="sum" id="kh">البوتيك يبيع القطع ويحوّل المبلغ آخر الشهر.</div><button class="act pri" style="width:100%" id="ok">إضافة</button>', function (el, close) {
+    var kind = 'bt';
+    $$('#kd .chip', el).forEach(function (c) { c.onclick = function () { kind = c.getAttribute('data-k'); $$('#kd .chip', el).forEach(function (x) { x.classList.toggle('on', x === c); }); $('#nm', el).placeholder = kind === 'expo' ? 'مثال: معرض شيك نوفمبر' : 'مثال: بوتيك الأناقة'; $('#kh', el).textContent = kind === 'expo' ? 'المعرض مثل البوتيك: تنقلين القطع إليه وتبيعين منه. الفرق أن المبلغ يدخل النقد فوراً، وبعد انتهائه ترجعين الباقي للمخزن فيختفي وحده.' : 'البوتيك يبيع القطع ويحوّل المبلغ آخر الشهر.'; }; });
     $('#ok', el).onclick = function () {
       var n = $('#nm', el).value.trim(); if (!n) return toast('اكتب الاسم', true);
-      close(); api('addBoutique', {name: n}).then(after);
+      close(); api('addBoutique', {name: n, expo: kind === 'expo'}).then(after);
     };
   });
 }
