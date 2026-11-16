@@ -357,6 +357,7 @@ function viewGoals() {
       var t = x[1] + (x[0] === 1 ? ' — الآن: ' + fmt0(g.gate1 || 0) + ' من 7' : '');
       return '<div class="kv"><span>' + (x[0] === 1 && (g.gate1 || 0) >= 7 ? '✓' : '○') + '</span><b>' + esc(t) + '</b></div>';
     }).join('') + (p.gate_note ? '<div class="stale" style="margin-top:8px">' + esc(p.gate_note) + '</div>' : '') + '</div>' : '') +
+    coverCard() +
     '<div class="card"><h3>كل الأهداف المفتوحة (' + open.length + ')</h3>' + (open.length ? open.map(function (x, i) { return goalRow(x, i); }).join('') : '<div class="empty">لا أهداف مفتوحة</div>') + '</div>' +
     (done.length ? '<div class="card"><h3>المنجزة (' + done.length + ')</h3>' + done.map(function (x) { return goalRow(x, -1); }).join('') + '</div>' : '') +
     barsCard() +
@@ -625,13 +626,19 @@ function modelBack(m) {
 function modelSell(m) {
   var s = modelStats(m);
   var go = function (loc) {
-    var cnt = s.loc[loc], sp = (s.first && s.first.sp) || '';
-    sheet('<h2>بيع ' + esc(m) + ' من ' + esc(loc) + '</h2><div class="stale">المتوفر ' + cnt + ' قطعة' + (loc !== MAIN ? ' — يُستلم المبلغ منهم' : '') + '. اللون غير مطلوب.</div>' + numField('qn', 'عدد القطع المباعة') + numField('pr', 'سعر القطعة (ر.ع)') + '<div class="f"><label>التاريخ (اختياري)</label><input id="dt" type="date"></div><button class="act pri" style="width:100%" id="ok">تسجيل البيع</button>', function (el, close) {
+    var cnt = s.loc[loc], sp = (s.first && s.first.sp) || '', hasCol = (s.cols[loc] || []).length > 0;
+    /* النسخة 26: الألوان اختيارية في البيع بالعدد. إن حُدّدت تُخصم من جدول الألوان، وإن تُركت لا يتغير الجدول. */
+    sheet('<h2>بيع ' + esc(m) + ' من ' + esc(loc) + '</h2><div class="stale">المتوفر ' + cnt + ' قطعة' + (loc !== MAIN ? ' — يُستلم المبلغ منهم' : '') + '.</div>' + numField('qn', 'عدد القطع المباعة') + numField('pr', 'سعر القطعة (ر.ع)') +
+      (hasCol ? '<div class="f"><label>الألوان المباعة (اختياري)</label><div class="stale" style="margin:0 0 6px;text-align:start">إن حدّدتِها تُخصم من جدول الألوان. يمكن تركها.</div><div id="cr">' + colorRows(m, loc, cnt, false) + '</div><div class="sum" id="cs"></div></div>' : '') +
+      '<div class="f"><label>التاريخ (اختياري)</label><input id="dt" type="date"></div><button class="act pri" style="width:100%" id="ok">تسجيل البيع</button>', function (el, close) {
       $('#qn', el).value = 1; $('#pr', el).value = sp;
+      if (hasCol) { var upd = function () { var t = readSteps(el).reduce(function (a, x) { return a + x.n; }, 0); $('#cs', el).textContent = t ? 'ألوان محددة: ' + t + ' قطعة' : 'لم تُحدَّد ألوان'; }; bindSteps(el, upd); upd(); }
       $('#ok', el).onclick = function () {
-        var n = Math.floor(Number($('#qn', el).value)), p = Number($('#pr', el).value);
+        var n = Math.floor(Number($('#qn', el).value)), p = Number($('#pr', el).value), cl = hasCol ? readSteps(el) : [], ct = cl.reduce(function (a, x) { return a + x.n; }, 0);
         if (!(n >= 1) || n > cnt) return toast('العدد من 1 إلى ' + cnt, true); if (!(p > 0)) return toast('اكتب السعر', true);
+        if (ct && ct !== n) return toast('مجموع الألوان ' + ct + ' لا يساوي عدد القطع ' + n, true);
         var q = {op: 'sell', m: m, n: n, loc: loc, price: p, date: $('#dt', el).value};
+        if (ct) q.colors = cl;
         close();
         lateEdit(String(q.date || '').slice(0, 7), 'تسجيل بيع بتاريخ في ذلك الشهر', function (late) {
           q.late = late;
@@ -1486,6 +1493,16 @@ function lateEdit(mk, what, run) {
   var nm = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'][Number(mk.slice(5, 7)) - 1];
   if (S.user !== 'belal') return sheet('<h2>🔒 شهر ' + nm + ' منتهٍ</h2><div class="sum">' + esc(what) + '.<br>أرقام الشهر المنتهي لا تتغير من هذا الحساب. اطلبي من بلال أن يعدّلها من حسابه.</div><button class="act pri" style="width:100%" id="ok">فهمت</button>', function (el, close) { $('#ok', el).onclick = close; });
   askOverride('تعديل على شهر منتهٍ (' + nm + ')', [what, 'سيتغير ربح ذلك الشهر ويُسجَّل التعديل باسمك وتاريخه'], function () { run(true); });
+}
+
+/* ----- تغطية المخزون بالأشهر (تعريف بلال): القطع غير المباعة ÷ متوسط القطع المباعة شهرياً في آخر 3 أشهر (90 يوماً، أو منذ بدء النظام إن كان أقصر) ----- */
+function coverCard() {
+  var c = S.plan && S.plan.cover; if (!c) return '';
+  var mo = c.months, txt = mo == null ? 'لا مبيعات بعد' : (Math.round(mo * 10) / 10) + ' شهر';
+  return '<div class="card"><h3>تغطية المخزون</h3><div class="bigv">' + txt + '</div>' +
+    '<div class="stale" style="margin:0 0 8px">عندنا ' + fmt0(c.pcs) + ' قطعة · نبيع نحو ' + (Math.round(c.avg * 10) / 10) + ' قطعة في الشهر (آخر ' + c.days + ' يوماً)</div>' +
+    ruleLine(mo != null && mo < 8, 'شرط بوابة 31 ديسمبر', 'أقل من 8 أشهر') +
+    ruleLine(mo != null && mo < 4, 'شرط أي شراء جديد', 'أقل من 4 أشهر') + '</div>';
 }
 
 /* ----- الموديلات الراكدة (من بيانات المخزون، بلا خادم) ----- */
