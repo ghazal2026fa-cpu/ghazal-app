@@ -196,10 +196,12 @@ function render() {
   app.innerHTML = '<div class="top"><img src="icons/wordmark.png" alt=""><div class="ttl" id="ttl"></div>' +
     '<button class="ic" id="rf" title="تحديث">↻</button><button class="ic" id="mn" title="القائمة">⋮</button></div>' +
     '<div class="page" id="body"></div>' +
-    '<div class="nav"><button data-t="home"><span class="i">⌂</span>الرئيسية</button>' +
+    '<div class="nav nav6"><button data-t="home"><span class="i">⌂</span>الرئيسية</button>' +
     '<button data-t="goals"><span class="i">★</span>الأهداف</button>' +
+    '<button data-t="recon"><span class="i">✓</span>السبت<em class="dot hide" id="rdot"></em></button>' +
     '<button class="plus" id="plus"><span>+</span></button>' +
-    '<button data-t="inv"><span class="i">▦</span>المخزون</button></div>';
+    '<button data-t="inv"><span class="i">▦</span>المخزون</button>' +
+    '<button data-t="sup"><span class="i">⇅</span>المورد</button></div>';
   $$('.nav [data-t]').forEach(function (b) { b.onclick = function () { S.tab = b.getAttribute('data-t'); S.select = false; S.sel = {}; renderBody(); window.scrollTo(0, 0); }; });
   $('#plus').onclick = openAdd; $('#rf').onclick = refreshBtn; $('#mn').onclick = openMenu;
   renderBody();
@@ -207,9 +209,10 @@ function render() {
 function renderBody() {
   if (!S.token || !$('#body')) return;
   $$('.nav [data-t]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === S.tab); });
-  $('#ttl').textContent = S.tab === 'home' ? ('أهلاً ' + (S.name || '')) : S.tab === 'goals' ? 'الأهداف والخطة' : 'المخزون';
+  $('#ttl').textContent = S.tab === 'home' ? ('أهلاً ' + (S.name || '')) : S.tab === 'goals' ? 'الأهداف والخطة' : S.tab === 'recon' ? 'مطابقة السبت' : S.tab === 'sup' ? 'المورد' : 'المخزون';
   var old = $('.bulk'); if (old) old.remove();
-  if (S.tab === 'home') viewHome(); else if (S.tab === 'goals') viewGoals(); else viewInv();
+  var rd = $('#rdot'); if (rd) rd.classList.toggle('hide', !(S.plan && !S.plan.recon.done));
+  if (S.tab === 'home') viewHome(); else if (S.tab === 'goals') viewGoals(); else if (S.tab === 'recon') viewRecon(); else if (S.tab === 'sup') viewSup(); else viewInv();
 }
 function openMenu() {
   sheet('<h2>' + esc(S.name || '') + '</h2><div class="menu">' +
@@ -1131,14 +1134,20 @@ function arriveSheet(x) {
     $('#ok', el).onclick = function () { var a = Number($('#a', el).value) || 0; close(); api('arrive', {id: x.id, ship: a}).then(function (r) { res3(r); }); };
   });
 }
-function supplierSheet() {
+function supplierSheet(pre) {
   sheet('<h2>أسامة راجح</h2><div class="f"><label>العملية</label><select id="t"><option value="pay">سداد دفعة له</option><option value="buy">مشتريات منه (تزيد المستحق)</option></select></div>' + numField('a', 'المبلغ') +
     '<div class="f"><label>العملة</label><select id="c"><option>سعودي</option><option>يمني</option><option>عماني</option></select></div><div class="f"><label>ملاحظة (اختياري)</label><input id="n"></div>' +
-    '<label class="row-ck" id="pr"><input type="checkbox" id="p"> مدفوعة من مال شخصي (لا تُخصم من نقد المشروع)</label><button class="act pri" style="width:100%" id="ok">حفظ</button>', function (el, close) {
+    '<label class="row-ck" id="pr"><input type="checkbox" id="p"> مدفوعة من مال شخصي (لا تُخصم من نقد المشروع)</label><div class="sum" id="sh"></div><button class="act pri" style="width:100%" id="ok">حفظ</button>', function (el, close) {
+    if (pre) $('#t', el).value = pre;
+    function hint() { var sp = S.plan && S.plan.sup, a = Number($('#a', el).value) || 0, t = $('#t', el).value; $('#pr', el).style.display = t === 'pay' ? '' : 'none'; if (!sp) return; var omr = a / (sp.rates[$('#c', el).value] || 1), nb = sp.left + (t === 'pay' ? -omr : omr); $('#sh', el).innerHTML = 'المتبقي الآن ' + fmt(sp.left) + ' ر.ع' + (a > 0 ? ' · يساوي ' + fmt(omr) + ' ر.ع · بعدها <b class="' + (nb > sp.cap ? 'neg' : '') + '">' + fmt(nb) + '</b>' + (nb > sp.cap ? ' (فوق السقف ' + fmt0(sp.cap) + ')' : '') : ''); }
+    ['#t', '#a', '#c'].forEach(function (k) { $(k, el).oninput = hint; $(k, el).onchange = hint; }); hint();
     $('#ok', el).onclick = function () {
       var a = Number($('#a', el).value); if (!(a > 0)) return toast('اكتب المبلغ', true);
-      var t = $('#t', el).value;
-      close(); api('supPay', {type: t, amount: a, cur: $('#c', el).value, note: $('#n', el).value.trim(), personal: t === 'pay' && $('#p', el).checked}).then(function (r) { res3(r); });
+      var t = $('#t', el).value, cur = $('#c', el).value, q = {type: t, amount: a, cur: cur, note: $('#n', el).value.trim(), personal: t === 'pay' && $('#p', el).checked};
+      close();
+      var sp = S.plan && S.plan.sup, omr = sp ? a / (sp.rates[cur] || 1) : 0;
+      if (t === 'buy' && sp && sp.left + omr > sp.cap + 0.0005) askOverride('تجاوز سقف دين المورد', ['الدين سيصبح ' + fmt(sp.left + omr) + ' ر.ع والسقف ' + fmt0(sp.cap) + ' ر.ع'], function () { q.over = true; api('supPay', q).then(function (r) { res3(r); }); });
+      else api('supPay', q).then(function (r) { res3(r); });
     };
   });
 }
@@ -1319,6 +1328,142 @@ function rulesCard() {
     ruleLine(s.left <= s.cap, 'دين ' + esc(s.name), fmt(s.left) + ' من ' + fmt0(s.cap), s.left / s.cap, s.left > s.cap) +
     ruleLine(cashOk, 'النقد مقابل دين المورد', fmt(P.sys.cash) + ' / ' + fmt(s.left)) +
     (cashOk ? '' : '<div class="sum" style="background:#FBE9EA;color:var(--bad);margin:8px 0 0">لا تُدفع أقساط الشقة من نقد المشروع الآن.</div>') + '</div>';
+}
+
+/* ----- ربط المطابقة بشاشة الجرد الموجودة (النسخة 25) ----- */
+function kindOf(p, sys) { return p.k === MAIN ? 'main' : (sys.places.length === 2 ? 'bt' : ''); }
+function countDraft() {
+  var d = {}; try { d = JSON.parse(localStorage.getItem('gz_count') || '{}'); } catch (e) {}
+  var out = {main: {sys: 0, act: 0, done: 0, diffs: []}, bt: {sys: 0, act: 0, done: 0, diffs: []}};
+  ((S.inv && S.inv.models) || []).forEach(function (x) {
+    var s = modelStats(x.m);
+    ['main', 'bt'].forEach(function (w) {
+      var n = 0; s.locs.forEach(function (l) { if ((w === 'main') === (l === MAIN)) n += s.loc[l]; });
+      var a = d[w + x.m], has = a != null; out[w].sys += n; out[w].act += has ? a : n;
+      if (has) { out[w].done++; if (a !== n) out[w].diffs.push({m: x.m, sys: n, act: a}); }
+    });
+  });
+  return out;
+}
+
+/* ----- مطابقة السبت: ثلاث خطوات بالنقر ----- */
+var CASH_WHY = ['مصروف لم أسجّله', 'بيع لم أسجّله', 'مبلغ استلمته ولم أسجّله', 'لا أعرف السبب'];
+var STOCK_WHY = ['قطعة بيعت ولم تُسجَّل', 'قطعة نُقلت ولم تُسجَّل', 'قطعة مفقودة', 'لا أعرف السبب'];
+function rcNew() { return {step: 0, cashSame: null, cash: '', cashWhy: '', counts: {}, same: {}, why: '', paid: null}; }
+function stepDots(n) { return '<div class="dots">' + [1, 2, 3].map(function (i) { return '<span class="' + (i <= n ? 'on' : '') + '">' + i + '</span>'; }).join('<em></em>') + '</div>'; }
+function whyChips(list, cur, attr) { return '<div class="cats">' + list.map(function (t) { return '<button class="chip' + (cur === t ? ' on' : '') + '" ' + attr + '="' + esc(t) + '">' + esc(t) + '</button>'; }).join('') + '</div>'; }
+function viewRecon() {
+  var b = $('#body'), P = S.plan;
+  if (!P) { b.innerHTML = S.stamp ? needServer('مطابقة السبت') : '<div class="sk" style="height:170px"></div><div class="sk"></div>'; return; }
+  if (!S.rc) S.rc = rcNew();
+  var rc = S.rc, r = P.recon, sys = P.sys, h = '';
+  if (rc.step === 0) {
+    var last = P.hist[0];
+    h = '<div class="hero"><div class="l">مطابقة أسبوع السبت ' + dmy(r.due) + '</div><div class="v" style="font-size:26px">' + (r.done ? '✓ مسجّلة' : (r.isSat ? 'موعدها اليوم' : 'لم تُسجَّل بعد')) + '</div>' +
+      '<div class="row"><div>الالتزام<b>' + (r.tot ? r.ok + ' من ' + r.tot : '—') + '</b></div><div>السبت القادم<b>' + dmy(r.isSat && !r.done ? r.due : r.next) + '</b></div><div>المدة<b>10 دقائق</b></div></div></div>' +
+      '<div class="card"><h3>ماذا نفعل؟</h3><div class="kv"><span>1 · النقد</span><b>نقارن ما معك بما في النظام</b></div><div class="kv"><span>2 · القطع</span><b>نعدّ ما في البيت وما في البوتيك</b></div><div class="kv"><span>3 · المورد</span><b>نراجع الدين</b></div>' +
+      '<button class="act pri" style="width:100%;margin-top:12px" id="st">' + (r.done ? 'إعادة مطابقة هذا الأسبوع' : 'ابدأ المطابقة') + '</button></div>' +
+      '<div class="card"><h3>المطابقات السابقة</h3>' + (P.hist.length ? P.hist.map(function (x) {
+        var sd = 0; (x.stock || []).forEach(function (s) { sd += Math.abs(s.counted - s.sys); });
+        var okk = Math.abs(x.cashDiff) < 0.0005 && !sd;
+        return '<div class="bt"><div><div class="n">' + (okk ? '✓ ' : '⚠ ') + 'سبت ' + dmy(x.week) + '</div><div class="m">سجّلتها ' + esc(x.by || '') + ' في ' + dmy(x.date) + (okk ? ' · كل شيء مطابق' : (Math.abs(x.cashDiff) >= 0.0005 ? ' · فرق نقد ' + fmt(x.cashDiff) + ' (' + esc(x.cashNote) + ')' : '') + (sd ? ' · فرق ' + sd + ' قطعة (' + esc(x.note) + ')' : '')) + ((x.models || []).length ? '<br>فروقات الجرد: ' + x.models.map(function (q) { return esc(q.m) + ' ' + esc(q.w) + ' ' + q.act + ' بدل ' + q.sys; }).join('، ') : (x.counted ? '<br>جُرد ' + x.counted + ' موديلاً بلا فروقات' : '')) + '</div></div><div class="o ' + (okk ? 'pos' : 'neg') + '">' + (okk ? 'مطابق' : 'فرق') + '</div></div>';
+      }).join('') : '<div class="empty" style="padding:16px 10px">لا توجد مطابقات بعد</div>') + '</div>';
+    b.innerHTML = h; $('#st', b).onclick = function () { S.rc = rcNew(); S.rc.step = 1; viewRecon(); window.scrollTo(0, 0); };
+    return;
+  }
+  if (rc.step === 1) {
+    h = stepDots(1) + '<div class="card"><h3>1 · النقد</h3><div class="sum" style="text-align:center;margin-bottom:8px">النظام يقول إن نقد المشروع الآن</div><div class="bigv">' + fmt(sys.cash) + ' <small>ر.ع</small></div>' +
+      '<div class="stale">عدّي النقد الموجود فعلاً ثم اختاري</div>' +
+      '<div class="acts" style="margin-top:6px"><button class="act full' + (rc.cashSame === true ? ' pri' : '') + '" id="cs">نعم، نفس المبلغ ✓</button><button class="act full' + (rc.cashSame === false ? ' pri' : '') + '" id="cd">لا، المبلغ مختلف</button></div>' +
+      (rc.cashSame === false ? '<div class="f" style="margin-top:12px"><label>كم النقد الموجود معك؟ (ر.ع)</label><input id="ca" type="number" inputmode="decimal" step="0.001" value="' + esc(rc.cash) + '"></div><div class="sum" id="cdf"></div><div class="f"><label>ما سبب الفرق؟</label>' + whyChips(CASH_WHY, rc.cashWhy, 'data-cw') + '</div>' : '') +
+      '</div><div class="acts"><button class="act" id="bk">رجوع</button><button class="act pri" id="nx">التالي ‹</button></div>';
+    b.innerHTML = h;
+    $('#cs', b).onclick = function () { rc.cashSame = true; rc.cash = sys.cash; rc.cashWhy = ''; rc.step = 2; viewRecon(); window.scrollTo(0, 0); };
+    $('#cd', b).onclick = function () { rc.cashSame = false; if (rc.cash === sys.cash) rc.cash = ''; viewRecon(); var i = $('#ca'); if (i) i.focus(); };
+    if ($('#ca', b)) {
+      var df = function () { var v = $('#ca', b).value; rc.cash = v; var d = v === '' ? null : Math.round((Number(v) - sys.cash) * 1000) / 1000; $('#cdf', b).innerHTML = d == null ? 'اكتبي المبلغ' : Math.abs(d) < 0.0005 ? '<span class="pos">نفس مبلغ النظام ✓</span>' : 'الفرق: <b class="neg" style="direction:ltr;display:inline-block">' + (d > 0 ? '+' : '') + fmt(d) + '</b> ر.ع (' + (d > 0 ? 'معك أكثر من النظام' : 'معك أقل من النظام') + ')'; };
+      $('#ca', b).oninput = df; df();
+      $$('[data-cw]', b).forEach(function (c) { c.onclick = function () { rc.cashWhy = c.getAttribute('data-cw'); $$('[data-cw]', b).forEach(function (x) { x.classList.toggle('on', x === c); }); }; });
+    }
+    $('#bk', b).onclick = function () { rc.step = 0; viewRecon(); };
+    $('#nx', b).onclick = function () {
+      if (rc.cashSame === null) return toast('اختاري: نفس المبلغ أم مختلف', true);
+      if (rc.cashSame === false) { if (rc.cash === '' || isNaN(Number(rc.cash))) return toast('اكتبي النقد الموجود معك', true); if (Math.abs(Number(rc.cash) - sys.cash) >= 0.0005 && !rc.cashWhy) return toast('اختاري سبب الفرق', true); }
+      rc.step = 2; viewRecon(); window.scrollTo(0, 0);
+    };
+    return;
+  }
+  if (rc.step === 2) {
+    var anyDiff = sys.places.some(function (p) { return rc.same[p.k] === false && rc.counts[p.k] !== '' && Number(rc.counts[p.k]) !== p.pcs; });
+    h = stepDots(2) + sys.places.map(function (p, i) {
+      return '<div class="card"><h3>2 · ' + esc(p.n) + '</h3><div class="sum" style="text-align:center;margin-bottom:8px">النظام يقول</div><div class="bigv">' + fmt0(p.pcs) + ' <small>قطعة</small></div>' +
+        '<div class="acts" style="margin-top:6px"><button class="act' + (rc.same[p.k] === true ? ' pri' : '') + '" data-ps="' + i + '">نفس العدد ✓</button><button class="act' + (rc.same[p.k] === false ? ' pri' : '') + '" data-pd="' + i + '">العدد مختلف</button></div>' +
+        (rc.same[p.k] === false ? '<div class="f" style="margin-top:12px"><label>كم قطعة وجدتِ؟</label><input data-pc="' + i + '" type="number" inputmode="numeric" step="1" min="0" value="' + esc(rc.counts[p.k] == null ? '' : rc.counts[p.k]) + '"></div>' : '') +
+        (kindOf(p, sys) ? '<button class="chip" style="margin-top:10px" data-pj="' + i + '">خذي الرقم من الجرد بالموديل</button>' : '') + '</div>';
+    }).join('') + (sys.transit ? '<div class="stale">في الطريق ' + sys.transit + ' قطعة لا تُعدّ الآن</div>' : '') +
+      '<button class="act" style="width:100%;margin-bottom:12px" id="oj">فتح الجرد بالموديل (عدّ تفصيلي) ‹</button>' +
+      '<div class="card' + (anyDiff ? '' : ' hide') + '" id="wy"><h3>ما سبب فرق القطع؟</h3>' + whyChips(STOCK_WHY, rc.why, 'data-sw') + '</div>' +
+      '<div class="acts"><button class="act" id="bk">رجوع</button><button class="act pri" id="nx">التالي ‹</button></div>';
+    b.innerHTML = h;
+    function hasDiff() { return sys.places.some(function (p) { return rc.same[p.k] === false && rc.counts[p.k] !== '' && rc.counts[p.k] != null && Number(rc.counts[p.k]) !== p.pcs; }); }
+    $$('[data-ps]', b).forEach(function (e) { e.onclick = function () { var p = sys.places[Number(e.getAttribute('data-ps'))]; rc.same[p.k] = true; rc.counts[p.k] = p.pcs; viewRecon(); }; });
+    $$('[data-pd]', b).forEach(function (e) { e.onclick = function () { var i = Number(e.getAttribute('data-pd')), p = sys.places[i]; rc.same[p.k] = false; rc.counts[p.k] = ''; viewRecon(); var inp = $('[data-pc="' + i + '"]'); if (inp) inp.focus(); }; });
+    $$('[data-pc]', b).forEach(function (e) { e.oninput = function () { var p = sys.places[Number(e.getAttribute('data-pc'))]; rc.counts[p.k] = e.value; $('#wy', b).classList.toggle('hide', !hasDiff()); }; });
+    $$('[data-sw]', b).forEach(function (c) { c.onclick = function () { rc.why = c.getAttribute('data-sw'); $$('[data-sw]', b).forEach(function (x) { x.classList.toggle('on', x === c); }); }; });
+    $('#oj', b).onclick = function () { if (S.inv && S.inv.models && S.inv.models.length) countSheet(); else toast('لا توجد موديلات للجرد', true); };
+    $$('[data-pj]', b).forEach(function (e) { e.onclick = function () {
+      var p = sys.places[Number(e.getAttribute('data-pj'))], x = countDraft()[kindOf(p, sys)];
+      if (!x || !x.done) return toast('لم يُعدّ شيء في الجرد بعد. افتحي الجرد بالموديل أولاً', true);
+      rc.counts[p.k] = x.act; rc.same[p.k] = x.act === p.pcs; viewRecon(); toast('من الجرد: ' + x.act + ' قطعة (عُدّ ' + x.done + ' موديلاً، فروقات ' + x.diffs.length + ')');
+    }; });
+    $('#bk', b).onclick = function () { rc.step = 1; viewRecon(); };
+    $('#nx', b).onclick = function () {
+      var miss = sys.places.some(function (p) { return rc.same[p.k] == null || rc.counts[p.k] === '' || rc.counts[p.k] == null; });
+      if (miss) return toast('اختاري لكل مكان: نفس العدد أم مختلف', true);
+      if (hasDiff() && !rc.why) return toast('اختاري سبب فرق القطع', true);
+      if (!hasDiff()) rc.why = '';
+      rc.step = 3; viewRecon(); window.scrollTo(0, 0);
+    };
+    return;
+  }
+  var s = P.sup, cd = Math.round((Number(rc.cash) - sys.cash) * 1000) / 1000, sd = 0;
+  sys.places.forEach(function (p) { sd += Math.abs(Number(rc.counts[p.k]) - p.pcs); });
+  h = stepDots(3) + '<div class="card"><h3>3 · المورد</h3><div class="sum" style="text-align:center;margin-bottom:8px">المتبقي علينا لـ' + esc(s.name) + '</div><div class="bigv">' + fmt(s.left) + ' <small>ر.ع</small></div>' + pbar(s.left / s.cap, s.left > s.cap ? 'var(--bad)' : 'var(--wine)') + '<div class="stale">السقف ' + fmt0(s.cap) + ' ر.ع</div>' +
+    '<div class="f"><label>هل دُفع له شيء هذا الأسبوع ولم يُسجَّل؟</label><div class="acts" style="margin-top:0"><button class="act' + (rc.paid === false ? ' pri' : '') + '" id="pn">لا</button><button class="act' + (rc.paid === true ? ' pri' : '') + '" id="py">نعم، أسجّله الآن</button></div></div></div>' +
+    '<div class="card"><h3>الخلاصة</h3><div class="kv"><span>النقد</span><b class="' + (Math.abs(cd) < 0.0005 ? 'pos' : 'neg') + '">' + (Math.abs(cd) < 0.0005 ? 'مطابق ✓' : 'فرق ' + fmt(cd) + ' · ' + esc(rc.cashWhy)) + '</b></div><div class="kv"><span>القطع</span><b class="' + (sd ? 'neg' : 'pos') + '">' + (sd ? 'فرق ' + sd + ' قطعة · ' + esc(rc.why) : 'مطابق ✓') + '</b></div>' +
+    (Math.abs(cd) >= 0.0005 || sd ? '<div class="sum" style="margin-top:8px">الفرق يُحفظ مع سببه ليراجعه بلال. لا يتغير شيء في الأرقام تلقائياً.</div>' : '') + '</div>' +
+    '<div class="acts"><button class="act" id="bk">رجوع</button><button class="act pri" id="sv">حفظ المطابقة</button></div>';
+  b.innerHTML = h;
+  $('#pn', b).onclick = function () { rc.paid = false; viewRecon(); };
+  $('#py', b).onclick = function () { rc.paid = true; viewRecon(); supplierSheet('pay'); };
+  $('#bk', b).onclick = function () { rc.step = 2; viewRecon(); };
+  $('#sv', b).onclick = function () {
+    if (rc.paid === null) return toast('أجيبي عن سؤال المورد', true);
+    var cdr = countDraft(), mdl = cdr.main.diffs.map(function (x) { return {m: x.m, w: 'المخزن', sys: x.sys, act: x.act}; }).concat(cdr.bt.diffs.map(function (x) { return {m: x.m, w: 'البوتيك', sys: x.sys, act: x.act}; }));
+    api('reconSave', {cash: Number(rc.cash), cashNote: rc.cashWhy, counts: rc.counts, note: rc.why, paid: rc.paid, models: mdl, counted: cdr.main.done + cdr.bt.done}).then(function (r2) {
+      if (r2 && r2.ok) { S.rc = null; toast(r2.msg || 'تم'); loadAll(true); } else toast((r2 && r2.msg) || 'لم تُحفظ المطابقة', true);
+    });
+  };
+}
+
+/* ----- تبويب المورد ----- */
+function viewSup() {
+  var b = $('#body'), P = S.plan;
+  if (!P) { b.innerHTML = S.stamp ? needServer('تبويب المورد') : '<div class="sk" style="height:170px"></div><div class="sk"></div>'; return; }
+  var s = P.sup, over = s.left > s.cap + 0.0005, near = !over && s.left >= s.cap * 0.8;
+  b.innerHTML = '<div class="hero"><div class="l">المتبقي علينا لـ' + esc(s.name) + '</div><div class="v">' + fmt(s.left) + '<small>ر.ع</small></div>' +
+    '<div style="height:10px;background:rgba(255,255,255,.18);border-radius:6px;overflow:hidden;margin:0 0 10px"><div style="height:100%;width:' + Math.min(100, Math.round(s.left / s.cap * 100)) + '%;background:' + (over ? '#FF8A92' : 'var(--gold)') + '"></div></div>' +
+    '<div class="row"><div>سقف الدين<b>' + fmt0(s.cap) + '</b></div><div>المتاح تحت السقف<b>' + fmt(Math.max(0, s.cap - s.left)) + '</b></div><div>النقد الآن<b>' + fmt(P.sys.cash) + '</b></div></div></div>' +
+    (over ? '<div class="sum" style="background:#FBE9EA;color:var(--bad)">⚠ الدين فوق السقف. لا مشتريات جديدة منه حتى ينزل.</div>' : near ? '<div class="sum" style="background:#FFF4DC;color:#7A5A00">الدين قريب من السقف.</div>' : '') +
+    '<div class="acts" style="margin-top:0;margin-bottom:12px"><button class="act pri" id="sp1">سداد دفعة له</button><button class="act" id="sp2">مشتريات منه</button></div>' +
+    '<div class="card"><h3>آخر الحركات</h3>' + (s.moves.length ? s.moves.map(function (m) {
+      return '<div class="bt"><div><div class="n">' + (m.t === 'pay' ? 'سداد' : 'مشتريات') + '</div><div class="m">' + esc(m.d) + ' · ' + fmt0(m.a) + ' ' + esc(m.cur) + (m.per ? ' · من مال شخصي' : '') + (m.nt ? ' · ' + esc(m.nt) : '') + '</div></div><div class="o ' + (m.t === 'pay' ? 'pos' : '') + '">' + (m.t === 'pay' ? '−' : '+') + fmt(m.omr) + '</div></div>';
+    }).join('') : '<div class="empty" style="padding:16px 10px">لا توجد دفعات أو مشتريات مسجلة بعد</div>') + '</div>' +
+    '<div class="card"><h3>أسعار الصرف</h3>' + Object.keys(s.rates).filter(function (k) { return s.rates[k] !== 1; }).map(function (k) { return '<div class="kv"><span>ريال ' + esc(k) + '</span><b>' + fmt0(s.rates[k]) + ' لكل 1 ر.ع</b></div>'; }).join('') + '</div>' +
+    '<button class="act" style="width:100%" id="sp3">كل الشحنات والموردين ‹</button>';
+  $('#sp1', b).onclick = function () { supplierSheet('pay'); };
+  $('#sp2', b).onclick = function () { supplierSheet('buy'); };
+  $('#sp3', b).onclick = shipsSheet;
 }
 
 /* ---------- start ---------- */
