@@ -143,3 +143,85 @@ h3{margin:0 0 10px;font-size:16px;color:var(--wine);font-weight:800}
 
 .bt[data-b]{cursor:pointer}
 .pk{border-bottom:1px solid var(--line)}
+
+/* ===== إضافات النسخة 26 ===== */
+.nav.nav6 button{font-size:11px}
+.nav.nav6 button .i{font-size:20px}
+.nav.nav6 .plus{flex:0 0 58px}
+.nav.nav6 .plus span{width:52px;height:52px;font-size:28px}
+.nav button{position:relative}
+.nav .dot{position:absolute;top:4px;inset-inline-start:calc(50% + 8px);width:9px;height:9px;border-radius:50%;background:var(--bad);border:2px solid #fff}
+.jump{cursor:pointer}
+.rl{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px dashed var(--line)}
+.rl:last-of-type{border-bottom:0}
+.ri{flex:0 0 26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:14px;color:#fff}
+.ri.ok{background:var(--ok)}.ri.no{background:var(--bad)}
+.rb{flex:1;min-width:0}
+.rt2{display:flex;justify-content:space-between;gap:10px;font-size:14.5px}
+.rt2 b{font-weight:700;text-align:left}
+.dwrap{display:flex;align-items:center;gap:12px}
+.donut{flex:0 0 150px;width:150px;height:150px}
+.donut .seg{cursor:pointer;transition:stroke-width .2s}
+.donut .dn{font:800 30px 'Tajawal',sans-serif;fill:var(--wine)}
+.donut .dl{font:500 12px 'Tajawal',sans-serif;fill:var(--mute)}
+.dleg{flex:1;display:grid;gap:6px;min-width:0}
+.lg{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;border:1.5px solid var(--line);background:#fff;text-align:right;font-size:13.5px}
+.lg.on{border-color:var(--wine);background:#FBF3F1}
+.lg i{flex:0 0 12px;height:12px;border-radius:4px}
+.lg span{flex:1}
+.lg b{font-weight:800;color:var(--wine);text-align:left}
+.lg small{display:block;font-weight:400;color:var(--mute);font-size:11px}
+.mbars{display:flex;gap:6px;align-items:stretch;height:170px}
+.mcol{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 0;border-radius:12px}
+.mcol.on{background:#FBF3F1}
+.mv{font-weight:800;color:var(--wine);font-size:14px}
+.mv small{font-weight:400;color:var(--mute);font-size:11px}
+.mtrack{flex:1;width:70%;position:relative;display:block}
+.mt{position:absolute;bottom:0;inset-inline:0;background:#EADCDD;border-radius:8px 8px 3px 3px}
+.mc{position:absolute;bottom:0;inset-inline:18%;background:var(--wine);border-radius:6px 6px 2px 2px;transition:height .6s cubic-bezier(.2,.8,.2,1)}
+.mcol.cur .mc{background:var(--gold)}
+.ml{font-size:11.5px;color:var(--mute)}
+.mcol.cur .ml{color:var(--wine);font-weight:800}
+.hl{display:flex;justify-content:space-between;font-size:14px;margin-top:8px}
+.htrack{position:relative;height:14px;background:#EADCDD;border-radius:7px;margin-top:4px}
+.hf{display:block;height:100%;border-radius:7px;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.hcap{position:absolute;top:-4px;bottom:-4px;width:3px;background:var(--gold);border-radius:2px}
+.dots{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px}
+.dots span{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#fff;border:2px solid var(--line);color:var(--mute);font-weight:800}
+.dots span.on{background:var(--wine);border-color:var(--wine);color:#fff}
+.dots em{flex:0 0 28px;height:2px;background:var(--line)}
+.bigv{text-align:center;font-size:38px;font-weight:800;color:var(--wine);margin:0 0 6px}
+.bigv small{font-size:16px;font-weight:500;color:var(--mute)}
+.jump .bt{gap:10px}
+.jump .bt>div:first-child{min-width:0}
+.jump .o{flex:0 0 auto}
+.jump .chip{display:inline-block;white-space:nowrap}
+.msw{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:center}
+.msw b{display:block;font-size:18px;color:var(--wine);font-weight:800}
+.msw button{width:44px;height:44px;border-radius:13px;background:var(--rose);color:var(--wine);font-size:24px;font-weight:800;display:grid;place-items:center}
+.msw button:disabled{opacity:.3}
+.mtag{display:inline-block;font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px;margin-top:2px}
+.mtag.op{background:#E3F1EA;color:var(--ok)}
+.mtag.cl{background:#EFE7EA;color:var(--mute)}
+#mexp{cursor:pointer;border-bottom:1px dashed var(--line)}
+.more{display:block;width:100%;background:var(--card);border:2px dashed var(--gold);border-radius:var(--r);padding:14px;text-align:center;font-weight:800;color:var(--wine);font-size:16px;margin-bottom:12px}
+.more small{display:block;font-weight:500;color:var(--mute);font-size:12.5px;margin-top:2px}
+.mtag.bd{background:#FBE9EA;color:var(--bad)}
+.rn{font:800 28px 'Tajawal',sans-serif;fill:var(--wine)}
+.rl2{font:500 12px 'Tajawal',sans-serif;fill:var(--mute)}
+.ring{transition:stroke-dasharray .6s}
+/* الشكل 1: أسئلة داخل البطاقة الخمرية، وقائمة «ما عليكِ اليوم» */
+.hero .hq{display:inline-block;background:rgba(255,255,255,.14);color:var(--rose);border-radius:999px;padding:2px 12px;font-size:12.5px;margin:-4px 0 6px}
+.hero .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;border-top:1px solid rgba(232,201,196,.25);padding-top:10px;font-size:13px;color:var(--rose)}
+.hero .row2 b{display:block;color:#fff;font-size:18px}
+.hero .row2 span{display:block}
+.hbar{height:8px;background:rgba(255,255,255,.18);border-radius:5px;overflow:hidden;margin-top:6px}
+.hbar i{display:block;height:100%;background:var(--gold);border-radius:5px}
+.today h3{margin:0}
+.today .d{font-size:12.5px;color:var(--mute);margin:0 0 4px}
+.today .task{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px dashed var(--line);font-size:15px}
+.today .task .dot{flex:0 0 9px;height:9px;border-radius:50%}
+.today .task .t{flex:1;min-width:0;font-weight:500}
+.today .task small{display:block;font-size:12.5px;color:var(--mute);font-weight:400}
+.today .task .au{flex:0 0 auto;display:inline}
+.mtag.ex{background:#F6EBD6;color:#7A5A00}

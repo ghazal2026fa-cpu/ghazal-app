@@ -173,7 +173,8 @@ function viewLogin() {
 /* ---------- data ---------- */
 function loadAll(silent) {
   if (!S.token) return Promise.resolve();
-  return Promise.all([api('dash', null, {silent: true}), api('inv', null, {silent: true}), api('meta', null, {silent: true}), api('goals', null, {silent: true})]).then(function (a) {
+  return Promise.all([api('dash', null, {silent: true}), api('inv', null, {silent: true}), api('meta', null, {silent: true}), api('goals', null, {silent: true}), api('plan', null, {silent: true})]).then(function (a) {
+    if (a[4] && a[4].ok) { S.plan = a[4]; }
     if (a[3] && a[3].ok) { S.goals = a[3]; ls('gz_goals', JSON.stringify(a[3])); }
     if (a[0] && a[0].ok) { S.dash = a[0]; ls('gz_dash', JSON.stringify(a[0])); }
     if (a[1] && a[1].ok) { S.inv = a[1]; ls('gz_inv', JSON.stringify(a[1])); }
@@ -342,8 +343,6 @@ function goalAlerts(g) {
   var out = [];
   if (g.supplier > 0 && g.cash < g.supplier) out.push('النقد (' + fmt(g.cash) + ') أقل من دين المورد (' + fmt(g.supplier) + '). لا تُدفع أقساط الشقة من نقد المشروع الآن.');
   if (S.inv && S.inv.items) {
-    var n = S.inv.items.filter(function (i) { return i.st === 'مباع' && i.sp > 0 && i.ap > 0 && String(i.ch || '').indexOf('هدية') !== 0 && (i.sp - i.ap) / i.sp > 0.1001; }).length;
-    if (n) out.push(n + ' قطعة مباعة بخصم أكبر من 10% (يحتاج موافقة).');
   }
   return out;
 }
@@ -661,7 +660,10 @@ function installmentSheet() {
   sheet('<h2>قسط الشقة</h2><div class="sum">يُخصم من نقد المشروع ومن المتبقي في عقد الشقة، ولا يدخل في المصروفات ولا الأرباح.</div>' + numField('am', 'المبلغ (ر.ع)') + '<div class="f"><label>ملاحظة (اختياري)</label><input id="nt"></div><button class="act pri" style="width:100%" id="ok">تسجيل القسط</button>', function (el, close) {
     $('#ok', el).onclick = function () {
       var a = Number($('#am', el).value); if (!(a > 0)) return toast('اكتب المبلغ', true);
-      close(); api('installment', {amount: a, note: $('#nt', el).value.trim()}).then(after);
+      var q = {amount: a, note: $('#nt', el).value.trim()}, P = S.plan;
+      close();
+      if (P && P.sys.cash < P.sup.left) askOverride('قسط الشقة يخالف قاعدة الخطة الآن', ['النقد ' + fmt(P.sys.cash) + ' ر.ع أقل من دين المورد ' + fmt(P.sup.left) + ' ر.ع', 'القاعدة: لا تُدفع أقساط الشقة من نقد المشروع حتى يزيد النقد على الدين'], function () { q.over = true; api('installment', q).then(after); });
+      else api('installment', q).then(after);
     };
   });
 }
@@ -795,7 +797,8 @@ function addPieceSheet() {
       var o = {ship: $('#sh', el).value, desc: $('#ds', el).value.trim(), buy: Number($('#by', el).value), sale: Number($('#sp', el).value), qty: Number($('#qt', el).value) || 1, photo: data};
       if (!o.desc) return toast('اكتب الوصف', true);
       if (!(o.buy > 0) || !(o.sale > 0)) return toast('اكتب سعر الشراء والبيع', true);
-      close(); api('addPiece', o).then(after);
+      close();
+      var v = buyWarnings(o.qty, o.buy); if (v.length) askOverride('الشراء يخالف قاعدة في الخطة', v, function () { o.over = true; api('addPiece', o).then(after); }); else api('addPiece', o).then(after);
     };
   });
 }
@@ -911,8 +914,12 @@ function editSheet(it) {
   sheet('<h2>تعديل القطعة</h2><div class="sum" style="direction:ltr;text-align:right">' + esc(it.c) + '</div>' +
     '<div class="f"><label>الوصف</label><input id="ds" value="' + esc(it.d) + '"></div>' +
     '<div class="f"><label>سعر البيع المعتمد (ر.ع)</label><input id="sp" type="number" inputmode="decimal" step="0.001" value="' + it.sp + '"></div>' +
+    '<div class="sum" id="sg"></div>' +
     '<label class="row-ck"><input type="checkbox" id="same"> تطبيق على كل القطع غير المباعة التي لها نفس الوصف الحالي</label>' +
     '<button class="act pri" style="width:100%" id="ok">حفظ التعديل</button>', function (el, close) {
+    var sgv = suggestPrice(it.tc);
+    function sg() { var v = Number($('#sp', el).value) || 0; $('#sg', el).innerHTML = 'السعر حسب قاعدة الخطة: التكلفة ' + fmt(it.tc) + ' × ' + ruleMult() + ' = <b>' + fmt(sgv) + ' ر.ع</b>' + (v + 0.001 < sgv ? '<br><b style="color:var(--warn)">السعر الحالي أقل من القاعدة</b> <button class="chip" id="us" style="margin-top:6px">استخدم ' + fmt(sgv) + '</button>' : '<br><span class="pos">السعر على القاعدة أو أعلى ✓</span>'); var u = $('#us', el); if (u) u.onclick = function () { $('#sp', el).value = sgv; sg(); }; }
+    $('#sp', el).oninput = sg; sg();
     $('#ok', el).onclick = function () {
       var ds = $('#ds', el).value.trim(), sp = Number($('#sp', el).value);
       if (!ds) return toast('اكتب الوصف', true); if (!(sp > 0)) return toast('اكتب سعراً صحيحاً', true);
@@ -1101,10 +1108,12 @@ function shipPiecesSheet(x) {
       var ds = $('#ds', el).value.trim(), q = Math.floor(Number($('#q', el).value)), b = Number($('#b', el).value), sp = Number($('#s', el).value);
       if ($('#bc', el).value === 'cny') { var rt = Number($('#rt', el).value); if (!(rt > 0)) return toast('اكتب سعر الصرف', true); ls('gz_cny', String(rt)); b = Math.round(b / rt * 1000) / 1000; }
       if (!ds) return toast('اكتب الوصف', true); if (!(q >= 1 && q <= 60)) return toast('العدد من 1 إلى 60', true); if (!(b > 0) || !(sp > 0)) return toast('اكتب سعر الشراء وسعر البيع', true);
-      var pay = $('#pd', el).checked; close(); api('shipPieces', {id: x.id, qty: q, buy: b, sale: sp, desc: ds}).then(function (r) {
+      var pay = $('#pd', el).checked; close();
+      var run = function (over) { api('shipPieces', {id: x.id, qty: q, buy: b, sale: sp, desc: ds, over: over}).then(function (r) {
         if (r && r.ok && pay) return api('shipPay', {id: x.id, amount: Math.round(q * b * 1000) / 1000}).then(function (r2) { res3(r2 && r2.ok ? {ok: true, msg: (r.msg || 'تمت الإضافة') + ' + خُصم ثمن البضاعة من الصندوق'} : r2); });
         res3(r);
-      });
+      }); };
+      var v = buyWarnings(q, b); if (v.length) askOverride('الشراء يخالف قاعدة في الخطة', v, run); else run(false);
     };
   });
 }
@@ -1273,6 +1282,43 @@ function invoiceSheet(items) {
       }, 'image/jpeg', 0.9);
     };
   });
+}
+
+/* =====================================================================
+   إضافات النسخة التجريبية: قواعد الخطة، مطابقة السبت، تبويب المورد، رسوم الرئيسية
+   ===================================================================== */
+function RL() { return (S.plan && S.plan.rules) || {buyCap: 300, disc: 10, perColor: 2, mult: 2.3, round: 0.5, debtCap: 1500}; }
+function suggestPrice(tc) { var r = RL(), v = (Number(tc) || 0) * r.mult; return Math.round(Math.round(v / r.round) * r.round * 1000) / 1000; }
+function buyWarnings(q, b) {
+  var r = RL(), P = S.plan, v = [], now = P ? P.buy.month : 0;
+  if (now + q * b > r.buyCap + 0.0005) v.push('مشتريات هذا الشهر ستصبح ' + fmt(now + q * b) + ' ر.ع والسقف ' + fmt0(r.buyCap) + ' ر.ع');
+  if (q > r.perColor) v.push('العدد ' + q + ' والقاعدة قطعتان فقط لكل لون');
+  return v;
+}
+function askOverride(title, lines, cb) {
+  sheet('<h2>' + esc(title) + '</h2>' + lines.map(function (t) { return '<div class="sum" style="background:#FBE9EA;color:var(--bad)">⚠ ' + esc(t) + '</div>'; }).join('') +
+    '<div class="acts" style="margin-top:0"><button class="act full" id="n">رجوع بدون تسجيل</button><button class="act dng full" id="y">متابعة كاستثناء (يُسجَّل في الملاحظة)</button></div>', function (el, close) {
+    $('#y', el).onclick = function () { close(); cb(true); };
+    $('#n', el).onclick = function () { close(); toast('لم تُسجَّل العملية'); };
+  });
+}
+function bindJump(b) { $$('[data-jump]', b).forEach(function (r) { r.onclick = function () { S.tab = r.getAttribute('data-jump'); renderBody(); window.scrollTo(0, 0); }; }); }
+function dmy(d) { return d ? d.slice(8, 10) + '/' + d.slice(5, 7) : ''; }
+
+/* ----- بطاقة قواعد الخطة ----- */
+function needServer(what) { return '<div class="card"><h3>' + esc(what) + '</h3><div class="empty" style="padding:20px 10px">يحتاج تحديث الخادم إلى الإصدار الجديد. أخبر بلال.</div></div>'; }
+function ruleLine(okk, label, val, bar, barBad) {
+  return '<div class="rl"><span class="ri ' + (okk ? 'ok' : 'no') + '">' + (okk ? '✓' : '!') + '</span><div class="rb"><div class="rt2"><span>' + label + '</span><b>' + val + '</b></div>' + (bar == null ? '' : pbar(bar, barBad ? 'var(--bad)' : 'var(--ok)')) + '</div></div>';
+}
+function rulesCard() {
+  var P = S.plan; if (!P) return '';
+  var r = P.rules, rc = P.recon, s = P.sup, cashOk = P.sys.cash >= s.left;
+  return '<div class="card"><h3>قواعد الخطة</h3>' +
+    ruleLine(P.buy.month <= r.buyCap, 'مشتريات هذا الشهر', fmt(P.buy.month) + ' من ' + fmt0(r.buyCap), P.buy.month / r.buyCap, P.buy.month > r.buyCap) +
+    ruleLine(P.low === 0, 'سعر أقل من التكلفة × ' + r.mult, P.low ? P.low + ' قطعة في المخزون' : 'لا يوجد') +
+    ruleLine(s.left <= s.cap, 'دين ' + esc(s.name), fmt(s.left) + ' من ' + fmt0(s.cap), s.left / s.cap, s.left > s.cap) +
+    ruleLine(cashOk, 'النقد مقابل دين المورد', fmt(P.sys.cash) + ' / ' + fmt(s.left)) +
+    (cashOk ? '' : '<div class="sum" style="background:#FBE9EA;color:var(--bad);margin:8px 0 0">لا تُدفع أقساط الشقة من نقد المشروع الآن.</div>') + '</div>';
 }
 
 /* ---------- start ---------- */
