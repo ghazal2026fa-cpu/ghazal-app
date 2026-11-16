@@ -1014,7 +1014,7 @@ function logSheet() {
         b.onclick = function () {
           var x = r.rows[Number(b.getAttribute('data-i'))];
           sheet('<h2>حذف هذه الحركة؟</h2><div class="sum">' + esc(x.t) + (x.p ? ' · ' + esc(x.p) : '') + '<br>' + fmt(x.a) + ' ر.ع · ' + esc(x.d) + (x.nt ? '<br>' + esc(x.nt) : '') + '<br>سيتغير رصيد النقد.</div><button class="act dng" style="width:100%" id="ok">نعم، احذفها</button>', function (e2, c2) {
-            $('#ok', e2).onclick = function () { c2(); close(); api('delTrx', {row: x.row, t: x.t, a: x.a}).then(after); };
+            $('#ok', e2).onclick = function () { c2(); close(); api('delTrx', {row: x.row, typ: x.t, amt: x.a}).then(after); };
           });
         };
       });
