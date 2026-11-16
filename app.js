@@ -601,7 +601,12 @@ function modelSell(m) {
       $('#ok', el).onclick = function () {
         var n = Math.floor(Number($('#qn', el).value)), p = Number($('#pr', el).value);
         if (!(n >= 1) || n > cnt) return toast('العدد من 1 إلى ' + cnt, true); if (!(p > 0)) return toast('اكتب السعر', true);
-        close(); api('modelOp', {op: 'sell', m: m, n: n, loc: loc, price: p, date: $('#dt', el).value}).then(after);
+        var q = {op: 'sell', m: m, n: n, loc: loc, price: p, date: $('#dt', el).value};
+        close();
+        lateEdit(String(q.date || '').slice(0, 7), 'تسجيل بيع بتاريخ في ذلك الشهر', function (late) {
+          q.late = late;
+          api('modelOp', q).then(after);
+        });
       };
     });
   };
@@ -734,7 +739,7 @@ function giftSheet(it) {
 }
 function confirmUnsell(it) {
   sheet('<h2>إلغاء البيع؟</h2><div class="sum">' + esc(it.c) + ' · ' + esc(it.d) + '<br>ستعود القطعة إلى ' + (it.loc && it.loc !== 'المخزن الرئيسي' ? esc(it.loc) : 'المخزن') + ' وتُحذف بيانات البيع.</div><button class="act dng" style="width:100%" id="ok">نعم، ألغِ البيع</button>', function (el, close) {
-    $('#ok', el).onclick = function () { close(); api('unsell', {code: it.c}).then(after); };
+    $('#ok', el).onclick = function () { close(); lateEdit(String(it.sd || '').slice(0, 7), 'إلغاء بيع قطعة بيعت في ذلك الشهر', function (late) { api('unsell', {code: it.c, late: late}).then(after); }); };
   });
 }
 function chooseBoutique(codes) {
@@ -1018,14 +1023,22 @@ function logSheet() {
       if (!r.rows.length) { box.innerHTML = '<div class="empty">لا توجد حركات</div>'; return; }
       box.innerHTML = r.rows.map(function (x, i) {
         var inn = x.t === 'استلام نقد' || x.t === 'دين مستلم';
-        return '<div class="bt"><div><div class="n">' + esc(x.t) + (x.p ? ' · ' + esc(x.p) : '') + '</div><div class="m">' + esc(x.d) + (x.nt ? ' · ' + esc(x.nt) : '') + '</div></div>' +
-          '<div class="o ' + (inn ? 'pos' : '') + '">' + (inn ? '+' : '') + fmt(x.a) + (DELETABLE[x.t] ? '<br><button data-i="' + i + '" class="chip" style="margin-top:4px;color:var(--bad)">حذف</button>' : '') + '</div></div>';
+        var tail = x.del ? (x.can ? '<br><button data-r="' + i + '" class="chip" style="margin-top:4px">استرجاع</button>' : '') :
+          DELETABLE[x.t] ? (x.can === false ? '<br><small style="color:var(--mute);font-weight:400">🔒 الحذف عند بلال</small>' : '<br><button data-i="' + i + '" class="chip" style="margin-top:4px;color:var(--bad)">حذف</button>') : '';
+        return '<div class="bt"' + (x.del ? ' style="opacity:.6"' : '') + '><div><div class="n"' + (x.del ? ' style="text-decoration:line-through"' : '') + '>' + esc(x.t) + (x.p ? ' · ' + esc(x.p) : '') + '</div><div class="m">' + esc(x.d) + (x.nt ? ' · ' + esc(x.nt) : '') + (x.by ? ' · سجّلها ' + esc(x.by) : '') + (x.del ? '<br><b style="color:var(--bad)">محذوفة</b> · حذفها ' + esc(x.del.by) + ' في ' + esc(x.del.d) + ' · لا تدخل في الحسابات' : '') + '</div></div>' +
+          '<div class="o ' + (inn && !x.del ? 'pos' : '') + '"' + (x.del ? ' style="text-decoration:line-through"' : '') + '>' + (inn ? '+' : '') + fmt(x.a) + '</div>' + (tail ? '<div class="o" style="flex:0 0 auto;margin-inline-start:8px">' + tail.replace('<br>', '') + '</div>' : '') + '</div>';
       }).join('');
+      $$('button[data-r]', box).forEach(function (b) {
+        b.onclick = function () {
+          var x = r.rows[Number(b.getAttribute('data-r'))]; close();
+          lateEdit(String(x.d || '').slice(0, 7), 'استرجاع حركة محذوفة من ذلك الشهر', function (late) { api('restoreTrx', {row: x.row, late: late}).then(after); });
+        };
+      });
       $$('button[data-i]', box).forEach(function (b) {
         b.onclick = function () {
           var x = r.rows[Number(b.getAttribute('data-i'))];
-          sheet('<h2>حذف هذه الحركة؟</h2><div class="sum">' + esc(x.t) + (x.p ? ' · ' + esc(x.p) : '') + '<br>' + fmt(x.a) + ' ر.ع · ' + esc(x.d) + (x.nt ? '<br>' + esc(x.nt) : '') + '<br>سيتغير رصيد النقد.</div><button class="act dng" style="width:100%" id="ok">نعم، احذفها</button>', function (e2, c2) {
-            $('#ok', e2).onclick = function () { c2(); close(); api('delTrx', {row: x.row, typ: x.t, amt: x.a}).then(after); };
+          sheet('<h2>حذف هذه الحركة؟</h2><div class="sum">' + esc(x.t) + (x.p ? ' · ' + esc(x.p) : '') + '<br>' + fmt(x.a) + ' ر.ع · ' + esc(x.d) + (x.nt ? '<br>' + esc(x.nt) : '') + '<br>سيتغير رصيد النقد. الحركة تبقى في السجل مشطوبة ويمكن استرجاعها.</div><button class="act dng" style="width:100%" id="ok">نعم، احذفها</button>', function (e2, c2) {
+            $('#ok', e2).onclick = function () { c2(); close(); lateEdit(String(x.d || '').slice(0, 7), 'حذف حركة مسجّلة في ذلك الشهر', function (late) { api('delTrx', {row: x.row, typ: x.t, amt: x.a, late: late}).then(after); }); };
           });
         };
       });
@@ -1409,6 +1422,15 @@ function expSheet(x) {
     if ($('#ne', el)) $('#ne', el).onclick = function () { close(); expenseSheet(); };
   });
 }
+/* الشهر المنتهي: غزل تُمنع برسالة واضحة، وبلال يُنبَّه ثم يتابع ويُسجَّل التعديل */
+function lateEdit(mk, what, run) {
+  var cur = (S.plan && S.plan.today || new Date().toISOString().slice(0, 10)).slice(0, 7);
+  if (!mk || mk >= cur) return run(false);
+  var nm = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'][Number(mk.slice(5, 7)) - 1];
+  if (S.user !== 'belal') return sheet('<h2>🔒 شهر ' + nm + ' منتهٍ</h2><div class="sum">' + esc(what) + '.<br>أرقام الشهر المنتهي لا تتغير من هذا الحساب. اطلبي من بلال أن يعدّلها من حسابه.</div><button class="act pri" style="width:100%" id="ok">فهمت</button>', function (el, close) { $('#ok', el).onclick = close; });
+  askOverride('تعديل على شهر منتهٍ (' + nm + ')', [what, 'سيتغير ربح ذلك الشهر ويُسجَّل التعديل باسمك وتاريخه'], function () { run(true); });
+}
+
 /* ----- الموديلات الراكدة (من بيانات المخزون، بلا خادم) ----- */
 function dayDiff(a, b) { return Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 864e5); }
 function slowList() {
