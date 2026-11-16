@@ -243,27 +243,51 @@ function viewHome() {
   if (!d) { b.innerHTML = '<div class="sk" style="height:170px"></div><div class="sk"></div><div class="sk"></div>'; return; }
   var net = d.cash + d.recv + d.stock - d.liab, m = d.month, inv = d.inv;
   var upd = S.stamp ? new Date(S.stamp).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '';
-  b.innerHTML = '<div class="hero"><div class="l">النقد الفعلي (نقد المشروع)</div><div class="v">' + fmt(d.cash) + '<small>ر.ع</small></div>' +
-    '<div class="row"><div>الصافي التشغيلي<b>' + fmt(net) + '</b></div><div>مبيعات الشهر<b>' + fmt(m.sales) + '</b></div><div>صافي ربح الشهر<b>' + fmt(m.net) + '</b></div></div></div>' +
-    homeGoals() + '<div class="grid2"><div class="tile"><div class="l">المخزون بالتكلفة</div><div class="v">' + fmt(d.stock) + '</div><div class="s">' + fmt0(inv.total.n) + ' قطعة</div></div>' +
-    '<div class="tile"><div class="l">مستحق على البوتيكات</div><div class="v">' + fmt(d.recv) + '</div><div class="s">لم يُحوَّل بعد</div></div>' +
-    '<div class="tile"><div class="l">التزامات الموردين</div><div class="v">' + fmt(d.liab) + '</div><div class="s">علينا للموردين</div></div>' +
-    '<div class="tile"><div class="l">قطع مباعة هذا الشهر</div><div class="v">' + fmt0(m.qty) + '</div><div class="s">من ' + esc(m.from) + '</div></div></div>' +
-    '<div class="card"><h3>أين القطع الآن</h3>' +
-    '<div class="kv"><span>في المخزن</span><b>' + fmt0(inv.main.n) + ' قطعة · ' + fmt(inv.main.v) + '</b></div>' +
-    '<div class="kv"><span>في البوتيكات</span><b>' + fmt0(inv.boutique.n) + ' قطعة · ' + fmt(inv.boutique.v) + '</b></div>' +
-    '<div class="kv"><span>في الطريق</span><b>' + fmt0(inv.transit.n) + ' قطعة · ' + fmt(inv.transit.v) + '</b></div></div>' +
-    '<div class="card"><h3>البوتيكات</h3>' + (d.boutiques.length ? d.boutiques.map(function (x) {
+  /* ترتيب بلال (17 نوفمبر): ب1 ب2 ب6 ب7 ب8 ب3، ثم «تفاصيل أكثر» وتحته ب9 ب10 ب4. */
+  var bts = d.boutiques.filter(function (x) { return !x.expo || x.pcs > 0; });
+  b.innerHTML = heroAsk(d) + todayCard() +
+    '<div class="grid2"><div class="tile"><div class="l">المخزون بالتكلفة</div><div class="v">' + fmt(d.stock) + '</div><div class="s">' + fmt0(inv.total.n) + ' قطعة</div></div>' +
+    '<div class="tile"><div class="l">مستحق على البوتيكات</div><div class="v">' + fmt(d.recv) + '</div><div class="s">لم يُحوَّل بعد</div></div></div>' +
+    homeCharts(d) + rulesCard() +
+    '<button class="more" id="mor">' + (S.more ? 'إخفاء التفاصيل ⌃' : 'تفاصيل أكثر ⌄') + '<small>أرباح الأشهر · الراكد · البوتيكات والمعارض</small></button>' +
+    '<div id="det"' + (S.more ? '' : ' class="hide"') + '>' +
+    '<div id="mcard">' + monthCard(m) + '</div>' + slowCard() +
+    '<div class="card"><h3>البوتيكات' + (bts.some(function (x) { return x.expo; }) ? ' والمعارض' : '') + '</h3>' + (bts.length ? bts.map(function (x) {
+      if (x.expo) return '<div class="bt" data-b="' + esc(x.n) + '"><div><div class="n">' + esc(x.n) + ' ‹ <span class="mtag ex">معرض</span></div><div class="m">فيه ' + fmt0(x.pcs) + ' قطعة · باع ' + fmt0(x.sold) + '</div></div><div class="o">' + fmt(x.soldVal) + '<div class="m">مبيعاته نقداً</div></div></div>';
       return '<div class="bt" data-b="' + esc(x.n) + '"><div><div class="n">' + esc(x.n) + ' ‹</div><div class="m">عنده ' + fmt0(x.pcs) + ' قطعة · باع ' + fmt0(x.sold) + '</div></div><div class="o">' + fmt(x.owed) + '<div class="m">متبقٍّ عليه</div></div></div>';
-    }).join('') : '<div class="empty">لا توجد بوتيكات</div>') + '</div>' +
-    '<div class="card"><h3>أرباح وخسائر الشهر</h3>' +
-    '<div class="kv"><span>المبيعات</span><b>' + fmt(m.sales) + '</b></div><div class="kv"><span>تكلفة القطع المباعة</span><b>' + fmt(m.cost) + '</b></div>' +
-    '<div class="kv"><span>مجمل الربح</span><b>' + fmt(m.gross) + '</b></div><div class="kv"><span>المصروفات التشغيلية</span><b>' + fmt(m.opex) + '</b></div>' +
-    '<div class="kv"><span>صافي الربح</span><b class="' + (m.net >= 0 ? 'pos' : 'neg') + '">' + fmt(m.net) + '</b></div>' +
-    '<div class="kv"><span>مسحوبات شخصية (خارج الربح)</span><b>' + fmt(m.draws) + '</b></div></div>' +
+    }).join('') : '<div class="empty">لا توجد بوتيكات</div>') + '</div></div>' +
     '<div class="stale">آخر تحديث ' + upd + ' · الأرقام بالريال العماني</div>';
   $$('.bt[data-b]', b).forEach(function (r) { r.onclick = function () { boutiqueSheet(r.getAttribute('data-b')); }; });
-  bindGoals(b);
+  bindGoals(b); bindCharts(b, d); bindJump(b);
+  var sl = $('#slw', b); if (sl) sl.onclick = slowSheet;
+  bindMonth(b, m);
+  $('#mor', b).onclick = function () { S.more = !S.more; viewHome(); if (S.more) { var e = $('#det'); if (e && e.scrollIntoView) e.scrollIntoView({block: 'start', behavior: 'smooth'}); } };
+}
+/* الشكل 1 (اختيار بلال 17 نوفمبر): البطاقة الخمرية الأصلية، وداخلها الأسئلة بدل العناوين المحاسبية. */
+function heroAsk(d) {
+  var g = S.goals, mt = g ? g.month.target : 0, md = g ? g.month.done : d.month.qty, p = mt ? Math.min(1, md / mt) : 0;
+  var x = monthData().cur, net = x ? x.net : d.month.net, debt = g ? g.supplier : 0;
+  if (x && x.closed) { var L = monthData().list; net = L.length ? L[L.length - 1].net : net; }
+  return '<div class="hero"><div class="l">كم معي؟</div><div class="v">' + fmt(d.cash) + '<small>ر.ع</small></div>' +
+    (debt > 0 && d.cash < debt ? '<div class="hq">أقل من دين المورد (' + fmt0(debt) + ')</div>' : '') +
+    '<div class="row2"><div><span>كم بعت هذا الشهر؟</span><b>' + fmt0(md) + (mt ? ' من ' + fmt0(mt) : ' قطعة') + '</b>' + (mt ? '<div class="hbar"><i style="width:' + Math.round(p * 100) + '%"></i></div>' : '') + '</div>' +
+    '<div><span>هل الشهر رابح؟</span><b>' + (net >= 0 ? 'ربح ' : 'خسارة ') + fmt0(Math.abs(net)) + '</b><span>حتى الآن</span></div></div></div>';
+}
+/* «ما عليكِ اليوم»: المطابقة يوم السبت فقط أو إن تأخرت، والباقي من الأهداف (اليوم، خلال 7 أيام، أو متأخر). */
+var WD = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+var MN = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+function todayCard() {
+  var P = S.plan, rows = [], L = openGoals(), today = new Date(), next = null; today.setHours(0, 0, 0, 0);
+  if (P && !P.recon.done) rows.push('<div class="task" data-jump="recon" style="cursor:pointer"><span class="dot" style="background:var(--warn)"></span><span class="t">' + (P.recon.isSat ? 'اليوم السبت: مطابقة الأسبوع' : 'مطابقة السبت متأخرة (' + dmy(P.recon.due) + ')') + '</span><span class="chip on">ابدأ ‹</span></div>');
+  L.forEach(function (x, i) {
+    if (!x.d) return;
+    var days = Math.round((new Date(x.d + 'T00:00:00') - today) / 86400000);
+    if (days > 7) { if (!next || x.d < next.d) next = x; return; }
+    if (rows.length >= 4) return;
+    rows.push('<div class="task"><span class="dot" style="background:' + (days < 0 ? 'var(--bad)' : 'var(--wine)') + '"></span><span class="t">' + esc(x.g) + '<small>' + (days < 0 ? '<b style="color:var(--bad)">متأخر ' + (-days) + ' يوم</b>' : days === 0 ? 'اليوم' : 'بعد ' + days + ' يوم') + (x.rule && x.rneed ? ' · ' + fmt0(x.cur) + ' من ' + fmt0(x.rneed) : '') + '</small></span>' + (x.rule ? '<small class="au">تلقائي</small>' : '<button class="chip" data-gd="' + i + '">تم</button>') + '</div>');
+  });
+  if (!rows.length) rows.push('<div class="task"><span class="dot" style="background:var(--ok)"></span><span class="t">لا شيء مستعجل ✓' + (next ? '<small>أقرب موعد: ' + esc(next.g) + ' · ' + dmy(next.d) + '</small>' : '') + '</span></div>');
+  return '<div class="card today"><h3>ما عليكِ اليوم</h3><div class="d">' + WD[today.getDay()] + ' ' + today.getDate() + ' ' + MN[today.getMonth()] + '</div>' + rows.join('') + '</div>';
 }
 function openGoals() { var g = S.goals; return g ? (g.goals ? g.goals.filter(function (x) { return !x.done; }) : (g.open || [])) : []; }
 function bindGoals(b) {
