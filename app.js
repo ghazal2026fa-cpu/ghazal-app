@@ -304,9 +304,15 @@ function goalsTop() {
     (al.length ? al.map(function (t) { return '<div class="sum" style="background:#FBE9EA;color:var(--bad);margin-bottom:8px">⚠ ' + esc(t) + '</div>'; }).join('') : '') +
     '<div class="kv"><span>هدف الشهر</span><b>' + fmt0(g.month.done) + ' من ' + fmt0(g.month.target) + ' قطعة · ' + Math.round(g.month.pct * 100) + '%</b></div>' + pbar(g.month.pct) +
     '<div class="stale" style="margin:-2px 0 6px">مضى ' + Math.round(g.elapsed * 100) + '% من الشهر</div>' +
-    '<div class="kv"><span>هدف الفترة</span><b>' + fmt0(g.period.done) + ' من ' + fmt0(g.period.target) + ' · ' + Math.round(g.period.pct * 100) + '%</b></div>' + pbar(g.period.pct, 'var(--gold)') +
+    goal2027Line(g) +
+    (/2027/.test(g.period.label || '') ? '' : '<div class="kv"><span>' + esc(/التجربة/.test(g.period.label || '') ? 'هدف التجربة' : 'هدف الفترة') + '</span><b>' + fmt0(g.period.done) + ' من ' + fmt0(g.period.target) + ' · ' + Math.round(g.period.pct * 100) + '%</b></div>' + pbar(g.period.pct, 'var(--gold)')) +
     (L.length ? '<div style="margin-top:8px;font-weight:700">أقرب الأهداف</div>' + L.map(function (x, i) { return goalRow(x, i); }).join('') : '<div class="empty">لا أهداف مفتوحة</div>') +
     '<button class="chip" data-go="1" style="margin-top:10px">كل الأهداف والخطة ‹</button></div>';
+}
+/* النسخة 27: هدف 2027 = مجموع أهداف أشهر 2027 فقط في ورقة الأهداف (بلا نوفمبر وديسمبر 2026)، والمحقق منها. */
+function goal2027Line(g) {
+  var T = 0, C = 0; (g.months || []).forEach(function (m) { if (String(m.m).slice(0, 4) !== '2027') return; T += m.t || 0; C += m.c || 0; });
+  return T ? '<div class="kv"><span>هدف 2027</span><b>' + fmt0(C) + ' من ' + fmt0(T) + ' قطعة · ' + Math.round(C / T * 100) + '%</b></div>' + pbar(C / T, 'var(--wine)') : '';
 }
 function dueAlerts() {
   var today = new Date(); today.setHours(0, 0, 0, 0);
@@ -361,7 +367,7 @@ function viewGoals() {
     '<div class="card"><h3>كل الأهداف المفتوحة (' + open.length + ')</h3>' + (open.length ? open.map(function (x, i) { return goalRow(x, i); }).join('') : '<div class="empty">لا أهداف مفتوحة</div>') + '</div>' +
     (done.length ? '<div class="card"><h3>المنجزة (' + done.length + ')</h3>' + done.map(function (x) { return goalRow(x, -1); }).join('') + '</div>' : '') +
     barsCard() +
-    (g.months && g.months.length ? '<div class="card"><h3>مسار 2027 (الهدف / المحقق)</h3>' + g.months.map(function (m) {
+    (g.months && g.months.length ? '<div class="card"><h3>المسار الشهري (نوفمبر 2026 - ديسمبر 2027)</h3>' + g.months.map(function (m) {
       return '<div class="kv"><span>' + esc(m.m) + '</span><b>' + fmt0(m.c) + ' / ' + fmt0(m.t) + '</b></div>';
     }).join('') + '</div>' : '') +
     '<div class="card"><h3>ملخص الشهر</h3>' + g.summary.map(function (t) { return '<div class="stale">' + esc(t) + '</div>'; }).join('') + '</div>';
@@ -382,7 +388,8 @@ function goalsCard() {
     (al.length ? al.map(function (t) { return '<div class="sum" style="background:#FBE9EA;color:var(--bad);margin-bottom:8px">⚠ ' + esc(t) + '</div>'; }).join('') : '') +
     '<div class="kv"><span>هدف الشهر</span><b>' + fmt0(g.month.done) + ' من ' + fmt0(g.month.target) + ' قطعة · ' + Math.round(g.month.pct * 100) + '%</b></div>' + pbar(g.month.pct) +
     '<div class="stale" style="margin:-2px 0 6px">مضى ' + Math.round(g.elapsed * 100) + '% من الشهر</div>' +
-    '<div class="kv"><span>هدف الفترة</span><b>' + fmt0(g.period.done) + ' من ' + fmt0(g.period.target) + ' · ' + Math.round(g.period.pct * 100) + '%</b></div>' + pbar(g.period.pct, 'var(--gold)') +
+    goal2027Line(g) +
+    (/2027/.test(g.period.label || '') ? '' : '<div class="kv"><span>' + esc(/التجربة/.test(g.period.label || '') ? 'هدف التجربة' : 'هدف الفترة') + '</span><b>' + fmt0(g.period.done) + ' من ' + fmt0(g.period.target) + ' · ' + Math.round(g.period.pct * 100) + '%</b></div>' + pbar(g.period.pct, 'var(--gold)')) +
     '<div class="kv"><span>مبيعات الشهر</span><b>' + fmt(g.sales) + '</b></div><div class="kv"><span>صافي ربح الشهر</span><b class="' + (g.net >= 0 ? 'pos' : 'neg') + '">' + fmt(g.net) + '</b></div>' +
     '<div class="kv"><span>النقد / دين المورد</span><b>' + fmt(g.cash) + ' / ' + fmt(g.supplier) + '</b></div><div class="kv"><span>قطع المخزون</span><b>' + fmt0(g.stock) + '</b></div>' +
     '<div class="sum" style="margin-top:10px"><b>الخطوة التالية:</b> ' + esc(g.next) + (g.nextDate ? '<br>موعدها ' + esc(g.nextDate) : '') + '<br>مطابقة النقد القادمة (السبت): ' + esc(g.sat) + '</div>' +
@@ -844,7 +851,7 @@ function addPieceSheet() {
       if (!o.desc) return toast('اكتب الوصف', true);
       if (!(o.buy > 0) || !(o.sale > 0)) return toast('اكتب سعر الشراء والبيع', true);
       close();
-      var v = buyWarnings(o.qty, o.buy); if (v.length) askOverride('الشراء يخالف قاعدة في الخطة', v, function () { o.over = true; api('addPiece', o).then(after); }); else api('addPiece', o).then(after);
+      buyCheck(o.qty, o.buy, function (over) { if (over) o.over = true; api('addPiece', o).then(after); });
     };
   });
 }
@@ -1194,7 +1201,7 @@ function shipPiecesSheet(x) {
         if (r && r.ok && pay) return api('shipPay', {id: x.id, amount: Math.round(q * b * 1000) / 1000}).then(function (r2) { res3(r2 && r2.ok ? {ok: true, msg: (r.msg || 'تمت الإضافة') + ' + خُصم ثمن البضاعة من الصندوق'} : r2); });
         res3(r);
       }); };
-      var v = buyWarnings(q, b); if (v.length) askOverride('الشراء يخالف قاعدة في الخطة', v, run); else run(false);
+      buyCheck(q, b, run);
     };
   });
 }
@@ -1376,11 +1383,21 @@ function invoiceSheet(items) {
    ===================================================================== */
 function RL() { return (S.plan && S.plan.rules) || {buyCap: 300, disc: 10, perColor: 2, mult: 2.3, round: 0.5, debtCap: 1500}; }
 function suggestPrice(tc) { var r = RL(), v = (Number(tc) || 0) * r.mult; return Math.round(Math.round(v / r.round) * r.round * 1000) / 1000; }
-function buyWarnings(q, b) {
-  var r = RL(), P = S.plan, v = [], now = P ? P.buy.month : 0;
-  if (now + q * b > r.buyCap + 0.0005) v.push('مشتريات هذا الشهر ستصبح ' + fmt(now + q * b) + ' ر.ع والسقف ' + fmt0(r.buyCap) + ' ر.ع');
-  if (q > r.perColor) v.push('العدد ' + q + ' والقاعدة قطعتان فقط لكل لون');
-  return v;
+/* النسخة 27 (قرار بلال 16/11): حد المشتريات الشهري 300 تنبيه فقط، لا يمنع ولا يُعلَّم استثناء. «قطعتان لكل لون» باقية كما هي. */
+function buyCapLine(q, b) {
+  var r = RL(), P = S.plan, now = P ? P.buy.month : 0, after = now + q * b;
+  if (after <= r.buyCap + 0.0005) return '';
+  return 'اشتريتم هذا الشهر ' + fmt(now) + ' ر.ع، وبعد هذه ' + fmt(after) + ' ر.ع، أي فوق الحد (' + fmt0(r.buyCap) + ' ر.ع) بـ ' + fmt(after - r.buyCap) + ' ر.ع.';
+}
+function buyCheck(q, b, go) {
+  var cap = buyCapLine(q, b), rules = q > RL().perColor ? ['العدد ' + q + ' والقاعدة قطعتان فقط لكل لون'] : [];
+  if (rules.length) return askOverride('الشراء يخالف قاعدة في الخطة', rules.concat(cap ? [cap] : []), function () { go(true); });
+  if (!cap) return go(false);
+  sheet('<h2>تنبيه: تجاوز حد المشتريات الشهري</h2><div class="sum" style="background:#FFF4DC;color:#7A5A00">' + esc(cap) + '</div>' +
+    '<button class="act pri" style="width:100%" id="y">متابعة التسجيل</button><div style="text-align:center;margin-top:10px"><button class="chip" id="n">رجوع</button></div>', function (el, close) {
+    $('#y', el).onclick = function () { close(); go(false); };
+    $('#n', el).onclick = function () { close(); toast('لم تُسجَّل العملية'); };
+  });
 }
 function askOverride(title, lines, cb) {
   sheet('<h2>' + esc(title) + '</h2>' + lines.map(function (t) { return '<div class="sum" style="background:#FBE9EA;color:var(--bad)">⚠ ' + esc(t) + '</div>'; }).join('') +
@@ -1394,14 +1411,15 @@ function dmy(d) { return d ? d.slice(8, 10) + '/' + d.slice(5, 7) : ''; }
 
 /* ----- بطاقة قواعد الخطة ----- */
 function needServer(what) { return '<div class="card"><h3>' + esc(what) + '</h3><div class="empty" style="padding:20px 10px">يحتاج تحديث الخادم إلى الإصدار الجديد. أخبر بلال.</div></div>'; }
-function ruleLine(okk, label, val, bar, barBad) {
-  return '<div class="rl"><span class="ri ' + (okk ? 'ok' : 'no') + '">' + (okk ? '✓' : '!') + '</span><div class="rb"><div class="rt2"><span>' + label + '</span><b>' + val + '</b></div>' + (bar == null ? '' : pbar(bar, barBad ? 'var(--bad)' : 'var(--ok)')) + '</div></div>';
+function ruleLine(okk, label, val, bar, barBad, soft) { /* soft: تنبيه برتقالي لا مخالفة حمراء */
+  var cls = okk ? 'ok' : soft ? 'wn' : 'no', col = barBad ? (soft ? 'var(--warn)' : 'var(--bad)') : 'var(--ok)';
+  return '<div class="rl"><span class="ri ' + cls + '">' + (okk ? '✓' : '!') + '</span><div class="rb"><div class="rt2"><span>' + label + '</span><b>' + val + '</b></div>' + (bar == null ? '' : pbar(bar, col)) + '</div></div>';
 }
 function rulesCard() {
   var P = S.plan; if (!P) return '';
   var r = P.rules, rc = P.recon, s = P.sup, cashOk = P.sys.cash >= s.left;
   return '<div class="card"><h3>قواعد الخطة</h3>' +
-    ruleLine(P.buy.month <= r.buyCap, 'مشتريات هذا الشهر', fmt(P.buy.month) + ' من ' + fmt0(r.buyCap), P.buy.month / r.buyCap, P.buy.month > r.buyCap) +
+    ruleLine(P.buy.month <= r.buyCap, 'مشتريات هذا الشهر (حد تنبيه ' + fmt0(r.buyCap) + ')', fmt(P.buy.month) + ' من ' + fmt0(r.buyCap), P.buy.month / r.buyCap, P.buy.month > r.buyCap, true) +
     ruleLine(P.low === 0, 'سعر أقل من التكلفة × ' + r.mult, P.low ? P.low + ' قطعة في المخزون' : 'لا يوجد') +
     ruleLine(s.left <= s.cap, 'دين ' + esc(s.name), fmt(s.left) + ' من ' + fmt0(s.cap), s.left / s.cap, s.left > s.cap) +
     ruleLine(cashOk, 'النقد مقابل دين المورد', fmt(P.sys.cash) + ' / ' + fmt(s.left)) +
