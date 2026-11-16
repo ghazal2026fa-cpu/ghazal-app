@@ -6,7 +6,7 @@ function $(s, el) { return (el || document).querySelector(s); }
 function $$(s, el) { return Array.prototype.slice.call((el || document).querySelectorAll(s)); }
 function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} return null; }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]; }); }
-function fmt(n) { n = Number(n) || 0; return n.toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3}); }
+function fmt(n) { n = Number(n) || 0; var s = n.toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3}); return n < 0 ? '‎' + s : s; } /* علامة اتجاه حتى تبقى إشارة السالب يسار الرقم في الصفحة العربية */
 function fmt0(n) { n = Number(n) || 0; return n.toLocaleString('en-US', {maximumFractionDigits: 0}); }
 
 var S = {
@@ -295,7 +295,7 @@ function homeGoals() {
   var g = S.goals; if (!g) return '';
   var da = dueAlerts();
   var p = g.plan || {}, mo = g.months || [], T = 0, C = 0;
-  mo.forEach(function (m) { T += m.t || 0; C += m.c || 0; });
+  mo.forEach(function (m) { if (String(m.m).slice(0, 4) !== '2027') return; T += m.t || 0; C += m.c || 0; }); /* هدف 2027 فقط، بلا نوفمبر وديسمبر 2026 */
   var all = g.goals || [], dn = all.filter(function (x) { return x.done; }).length;
   var gate = p.gate_title ? (p.gate_title + ': ' + fmt0(g.gate1 || 0) + ' من 7 قطع في بوتيك ثانٍ') : '';
   return '<div class="card" data-go="1" style="border:2px solid var(--wine);cursor:pointer"><h3>★ رؤيتنا وأهداف السنة</h3>' +
