@@ -835,7 +835,9 @@ function withdrawSheet() {
 /* ---------- piece picker (bulk actions) ---------- */
 function pickPieces(o) {
   if (!o.items.length) return toast('لا توجد قطع', true);
-  sheet('<h2>' + esc(o.title) + '</h2><div class="sum" id="ps"></div><div class="f"><input id="pq" type="search" placeholder="بحث بالوصف أو الكود"></div><div id="pl">' +
+  sheet('<h2>' + esc(o.title) + '</h2><div class="sum" id="ps"></div><div class="f"><input id="pq" type="search" placeholder="بحث بالوصف أو الكود"></div>' +
+    (o.withPrice ? '<div class="f"><label>خصم على القطع المحددة (اختياري)</label><div style="display:flex;gap:8px"><select id="bk" style="width:112px"><option value="pct">نسبة %</option><option value="amt">مبلغ ر.ع</option></select><input id="bv" type="number" inputmode="decimal" step="0.001" placeholder="مثال: 10" style="flex:1;min-width:0"><button class="chip" id="bd" type="button">تطبيق</button></div></div>' : '') +
+    '<div id="pl">' +
     o.items.map(function (i) {
       return '<label class="row-ck pk" data-c="' + esc(i.c) + '" data-sp="' + i.sp + '" data-s="' + esc((i.c + ' ' + i.d).toLowerCase()) + '"><input type="checkbox"' + (o.all ? ' checked' : '') + '>' +
         '<span style="flex:1;font-size:14px;line-height:1.35">' + esc(i.d) + '<br><small style="color:var(--mute);direction:ltr;display:inline-block">' + esc(i.c) + '</small></span>' +
